@@ -24,6 +24,8 @@ enum class RouletteCategory(val firestoreValue: String, val label: String) {
 
 enum class GamePhase(val firestoreValue: String, val label: String) {
     IDLE("IDLE", "Lista"),
+    CATEGORY_SPINNING("CATEGORY_SPINNING", "Girando categoria"),
+    CATEGORY_SELECTED("CATEGORY_SELECTED", "Categoria elegida"),
     CONTENT_SPINNING("CONTENT_SPINNING", "Girando"),
     COMPLETED("COMPLETED", "Completada"),
     EXHAUSTED("EXHAUSTED", "Sin contenido");

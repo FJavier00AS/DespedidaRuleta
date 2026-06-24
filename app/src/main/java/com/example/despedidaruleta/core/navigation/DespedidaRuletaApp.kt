@@ -316,7 +316,9 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             RouletteScreen(
                 uiState = uiState,
-                onSpin = viewModel::spin,
+                onSpinCategory = viewModel::spinCategory,
+                onSpinContent = viewModel::spinContent,
+                onResolveResult = viewModel::resolveResult,
                 onResetGame = viewModel::resetGame,
                 onOpenAdmin = { navController.navigate(AppRoutes.sessionAdmin(sessionId)) },
                 onOpenHistory = { navController.navigate(AppRoutes.sessionHistory(sessionId)) },

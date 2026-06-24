@@ -8,6 +8,7 @@ import com.example.despedidaruleta.domain.model.ContentItem
 import com.example.despedidaruleta.domain.model.GamePhase
 import com.example.despedidaruleta.domain.model.LocalUserSettings
 import com.example.despedidaruleta.domain.model.NetworkStatus
+import com.example.despedidaruleta.domain.model.RouletteCategory
 import com.example.despedidaruleta.domain.model.RouletteGameState
 import com.example.despedidaruleta.domain.repository.AuthRepository
 import com.example.despedidaruleta.domain.repository.ConnectivityRepository
@@ -33,9 +34,16 @@ data class RouletteUiState(
     val errorMessage: String? = null,
     val infoMessage: String? = null
 ) {
-    val canSpin: Boolean = !actionLoading && gameState.phase != GamePhase.CONTENT_SPINNING && stats.sumOf { it.availableCount } > 0
     val totalAvailable: Int = stats.sumOf { it.availableCount }
     val totalUsed: Int = stats.sumOf { it.usedCount }
+    val categorySpinInProgress: Boolean = gameState.phase == GamePhase.CATEGORY_SPINNING
+    val contentSpinInProgress: Boolean = gameState.phase == GamePhase.CONTENT_SPINNING
+    val canSpinCategory: Boolean = !actionLoading && !categorySpinInProgress && !contentSpinInProgress && totalAvailable > 0
+    val selectedCategoryAvailable: Int = stats.firstOrNull { it.category == gameState.selectedCategory }?.availableCount ?: 0
+    val canSpinContent: Boolean = !actionLoading &&
+        gameState.phase == GamePhase.CATEGORY_SELECTED &&
+        gameState.selectedCategory != null &&
+        selectedCategoryAvailable > 0
 }
 
 class RouletteViewModel(
@@ -103,7 +111,7 @@ class RouletteViewModel(
         }
     }
 
-    fun spin() {
+    fun spinCategory() {
         val user = authRepository.currentUser
         if (user == null) {
             _uiState.update { it.copy(errorMessage = "Inicia sesion de nuevo.") }
@@ -112,10 +120,59 @@ class RouletteViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(actionLoading = true, errorMessage = null, infoMessage = null) }
             try {
-                val spin = rouletteRepository.startSpin(user, sessionId)
-                _uiState.update { it.copy(actionLoading = false, infoMessage = "Giro lanzado: ${spin.category.label}") }
+                val category = rouletteRepository.startCategorySpin(user, sessionId)
+                _uiState.update { it.copy(infoMessage = "Categoria elegida: ${category.label}") }
+                delay(2_500)
+                rouletteRepository.markCategorySpinCompleted(user, sessionId)
+                _uiState.update { it.copy(actionLoading = false) }
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
+            }
+        }
+    }
+
+    fun spinContent() {
+        val user = authRepository.currentUser
+        if (user == null) {
+            _uiState.update { it.copy(errorMessage = "Inicia sesion de nuevo.") }
+            return
+        }
+        val category = _uiState.value.gameState.selectedCategory
+        if (category == null) {
+            _uiState.update { it.copy(errorMessage = "Primero gira la ruleta de categoria.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(actionLoading = true, errorMessage = null, infoMessage = null) }
+            try {
+                val spin = rouletteRepository.startContentSpin(user, sessionId, category)
+                _uiState.update { it.copy(infoMessage = "Girando ${spin.category.label.lowercase()}") }
                 delay(2_500)
                 rouletteRepository.markSpinCompleted(user, sessionId, spin.id)
+                _uiState.update { it.copy(actionLoading = false) }
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
+            }
+        }
+    }
+
+    fun resolveResult(success: Boolean) {
+        val user = authRepository.currentUser
+        if (user == null) {
+            _uiState.update { it.copy(errorMessage = "Inicia sesion de nuevo.") }
+            return
+        }
+        val selectedCategory = _uiState.value.gameState.selectedCategory
+        viewModelScope.launch {
+            _uiState.update { it.copy(actionLoading = true, errorMessage = null, infoMessage = null) }
+            try {
+                if (!success && selectedCategory == RouletteCategory.QUESTION) {
+                    rouletteRepository.openPunishmentWheel(user, sessionId)
+                    _uiState.update { it.copy(actionLoading = false, infoMessage = "Fallo registrado. Gira la ruleta de castigos.") }
+                } else {
+                    rouletteRepository.returnToCategoryWheel(user, sessionId)
+                    _uiState.update { it.copy(actionLoading = false, infoMessage = "Volviendo a la ruleta principal.") }
+                }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
             }

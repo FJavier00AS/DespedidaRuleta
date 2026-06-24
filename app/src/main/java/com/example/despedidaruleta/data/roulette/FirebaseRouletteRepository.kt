@@ -182,11 +182,10 @@ class FirebaseRouletteRepository(
         }.await()
     }
 
-    override suspend fun startSpin(user: AuthUser, sessionId: String): SpinRecord {
+    override suspend fun startCategorySpin(user: AuthUser, sessionId: String): RouletteCategory {
         val sessionRef = sessionRef(sessionId)
-        val spinRef = sessionRef.collection(SPINS).document()
-        val nowMillis = System.currentTimeMillis()
-        val now = Date(nowMillis)
+        val stateRef = sessionRef.collection(STATE).document(GAME)
+        val now = Date()
 
         return firestore.runTransaction { transaction ->
             val sessionSnapshot = transaction.get(sessionRef)
@@ -199,12 +198,71 @@ class FirebaseRouletteRepository(
             val availableStats = statsByCategory.values.filter { it.availableContentIds.isNotEmpty() && it.availableCount > 0 }
             if (availableStats.isEmpty()) throw RouletteExhaustedException()
 
-            val selectedStats = chooseWeighted(availableStats)
+            val selectedCategory = chooseWeighted(availableStats).category
+            transaction.set(
+                stateRef,
+                mapOf(
+                    PHASE to GamePhase.CATEGORY_SPINNING.firestoreValue,
+                    ACTIVE_SPIN_ID to null,
+                    SELECTED_CATEGORY to selectedCategory.firestoreValue,
+                    SELECTED_CONTENT_ID to null,
+                    SELECTED_CONTENT_NUMBER to null,
+                    SELECTED_CONTENT_TEXT to null,
+                    CATEGORY_ROTATION to targetCategoryRotation(statsByCategory, selectedCategory),
+                    CONTENT_ROTATION to 0f,
+                    STARTED_AT to now,
+                    COMPLETED_AT to null,
+                    UPDATED_AT to now
+                ),
+                SetOptions.merge()
+            )
+            transaction.set(auditRef(sessionId), auditMap(user, "START_CATEGORY_SPIN", "category=${selectedCategory.firestoreValue}"))
+            selectedCategory
+        }.await()
+    }
+
+    override suspend fun markCategorySpinCompleted(user: AuthUser, sessionId: String) {
+        val sessionRef = sessionRef(sessionId)
+        val stateRef = sessionRef.collection(STATE).document(GAME)
+        val now = Date()
+        firestore.runTransaction { transaction ->
+            val sessionSnapshot = transaction.get(sessionRef)
+            assertMember(sessionId, sessionSnapshot, user.uid, transaction)
+            val stateSnapshot = transaction.get(stateRef)
+            if (RouletteCategory.fromFirestore(stateSnapshot.getString(SELECTED_CATEGORY)) == null) {
+                throw RouletteContentMissingException()
+            }
+            transaction.set(
+                stateRef,
+                mapOf(
+                    PHASE to GamePhase.CATEGORY_SELECTED.firestoreValue,
+                    COMPLETED_AT to now,
+                    UPDATED_AT to now
+                ),
+                SetOptions.merge()
+            )
+            null
+        }.await()
+    }
+
+    override suspend fun startContentSpin(user: AuthUser, sessionId: String, category: RouletteCategory): SpinRecord {
+        val sessionRef = sessionRef(sessionId)
+        val spinRef = sessionRef.collection(SPINS).document()
+        val nowMillis = System.currentTimeMillis()
+        val now = Date(nowMillis)
+
+        return firestore.runTransaction { transaction ->
+            val sessionSnapshot = transaction.get(sessionRef)
+            assertMember(sessionId, sessionSnapshot, user.uid, transaction)
+
+            val selectedStats = transaction.get(statsRef(sessionId, category)).toCategoryStats(category)
+            if (selectedStats.totalCount == 0) throw RouletteContentMissingException()
+            if (selectedStats.availableContentIds.isEmpty() || selectedStats.availableCount <= 0) throw RouletteExhaustedException()
             val selectedContentId = selectedStats.availableContentIds.random()
             val contentRef = sessionRef.collection(CONTENT).document(selectedContentId)
             val contentSnapshot = transaction.get(contentRef)
             val item = contentSnapshot.toContentItem() ?: throw RouletteContentMissingException()
-            if (!item.active || item.used) throw RouletteExhaustedException()
+            if (!item.active || item.used || item.category != category) throw RouletteExhaustedException()
 
             val nextAvailableIds = selectedStats.availableContentIds.filterNot { it == selectedContentId }
             val updatedStats = selectedStats.copy(
@@ -245,12 +303,11 @@ class FirebaseRouletteRepository(
                 mapOf(
                     PHASE to GamePhase.CONTENT_SPINNING.firestoreValue,
                     ACTIVE_SPIN_ID to spinRef.id,
-                    SELECTED_CATEGORY to item.category.firestoreValue,
+                    SELECTED_CATEGORY to category.firestoreValue,
                     SELECTED_CONTENT_ID to item.id,
                     SELECTED_CONTENT_NUMBER to item.number,
                     SELECTED_CONTENT_TEXT to item.text,
-                    CATEGORY_ROTATION to randomRotation(item.category.ordinal),
-                    CONTENT_ROTATION to randomRotation(item.number),
+                    CONTENT_ROTATION to targetContentRotation(selectedStats.availableContentIds.size),
                     STARTED_AT to now,
                     COMPLETED_AT to null,
                     UPDATED_AT to now
@@ -294,6 +351,71 @@ class FirebaseRouletteRepository(
                     SetOptions.merge()
                 )
             }
+            null
+        }.await()
+    }
+
+    override suspend fun returnToCategoryWheel(user: AuthUser, sessionId: String) {
+        val sessionRef = sessionRef(sessionId)
+        val stateRef = sessionRef.collection(STATE).document(GAME)
+        val now = Date()
+        firestore.runTransaction { transaction ->
+            val sessionSnapshot = transaction.get(sessionRef)
+            assertMember(sessionId, sessionSnapshot, user.uid, transaction)
+            transaction.set(
+                stateRef,
+                mapOf(
+                    PHASE to GamePhase.IDLE.firestoreValue,
+                    ACTIVE_SPIN_ID to null,
+                    SELECTED_CATEGORY to null,
+                    SELECTED_CONTENT_ID to null,
+                    SELECTED_CONTENT_NUMBER to null,
+                    SELECTED_CONTENT_TEXT to null,
+                    CATEGORY_ROTATION to 0f,
+                    CONTENT_ROTATION to 0f,
+                    STARTED_AT to null,
+                    COMPLETED_AT to null,
+                    UPDATED_AT to now
+                ),
+                SetOptions.merge()
+            )
+            transaction.set(auditRef(sessionId), auditMap(user, "RETURN_TO_CATEGORY_WHEEL", ""))
+            null
+        }.await()
+    }
+
+    override suspend fun openPunishmentWheel(user: AuthUser, sessionId: String) {
+        val sessionRef = sessionRef(sessionId)
+        val stateRef = sessionRef.collection(STATE).document(GAME)
+        val now = Date()
+        firestore.runTransaction { transaction ->
+            val sessionSnapshot = transaction.get(sessionRef)
+            assertMember(sessionId, sessionSnapshot, user.uid, transaction)
+            val stats = transaction.get(statsRef(sessionId, RouletteCategory.PUNISHMENT)).toCategoryStats(RouletteCategory.PUNISHMENT)
+            if (stats.totalCount == 0) throw RouletteContentMissingException()
+            if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
+
+            transaction.set(
+                stateRef,
+                mapOf(
+                    PHASE to GamePhase.CATEGORY_SELECTED.firestoreValue,
+                    ACTIVE_SPIN_ID to null,
+                    SELECTED_CATEGORY to RouletteCategory.PUNISHMENT.firestoreValue,
+                    SELECTED_CONTENT_ID to null,
+                    SELECTED_CONTENT_NUMBER to null,
+                    SELECTED_CONTENT_TEXT to null,
+                    CATEGORY_ROTATION to targetCategoryRotation(
+                        mapOf(RouletteCategory.PUNISHMENT to stats),
+                        RouletteCategory.PUNISHMENT
+                    ),
+                    CONTENT_ROTATION to 0f,
+                    STARTED_AT to now,
+                    COMPLETED_AT to null,
+                    UPDATED_AT to now
+                ),
+                SetOptions.merge()
+            )
+            transaction.set(auditRef(sessionId), auditMap(user, "OPEN_PUNISHMENT_WHEEL", "question_failed"))
             null
         }.await()
     }
@@ -382,6 +504,10 @@ class FirebaseRouletteRepository(
                     SELECTED_CONTENT_ID to null,
                     SELECTED_CONTENT_NUMBER to null,
                     SELECTED_CONTENT_TEXT to null,
+                    CATEGORY_ROTATION to 0f,
+                    CONTENT_ROTATION to 0f,
+                    STARTED_AT to null,
+                    COMPLETED_AT to null,
                     UPDATED_AT to Date()
                 ),
                 SetOptions.merge()
@@ -419,7 +545,31 @@ class FirebaseRouletteRepository(
         return stats.first()
     }
 
-    private fun randomRotation(seed: Int): Float = 1_080f + Random.nextFloat() * 720f + seed * 17f
+    private fun targetCategoryRotation(
+        statsByCategory: Map<RouletteCategory, CategoryStats>,
+        selectedCategory: RouletteCategory
+    ): Float {
+        val weights = RouletteCategory.entries.map { category ->
+            statsByCategory[category]?.availableCount ?: 0
+        }
+        return targetWheelRotation(weights, RouletteCategory.entries.indexOf(selectedCategory))
+    }
+
+    private fun targetContentRotation(segmentCount: Int): Float =
+        targetWheelRotation(List(segmentCount.coerceAtLeast(1)) { 1 }, selectedIndex = 0)
+
+    private fun targetWheelRotation(weights: List<Int>, selectedIndex: Int): Float {
+        val safeWeights = weights.ifEmpty { listOf(1) }.map { it.coerceAtLeast(0) }
+        val effectiveWeights = if (safeWeights.any { it > 0 }) safeWeights else List(safeWeights.size) { 1 }
+        val clampedIndex = selectedIndex.coerceIn(0, effectiveWeights.lastIndex)
+        val totalWeight = effectiveWeights.sum().coerceAtLeast(1)
+        val previousWeight = effectiveWeights.take(clampedIndex).sum()
+        val selectedWeight = effectiveWeights[clampedIndex]
+        val selectedCenterOffset = (previousWeight + selectedWeight / 2f) * 360f / totalWeight
+        return FULL_SPINS * 360f + normalizeDegrees(-selectedCenterOffset)
+    }
+
+    private fun normalizeDegrees(degrees: Float): Float = ((degrees % 360f) + 360f) % 360f
 
     private fun sessionRef(sessionId: String): DocumentReference = firestore.collection(SESSIONS).document(sessionId)
 
@@ -621,5 +771,6 @@ class FirebaseRouletteRepository(
         const val STATUS = "status"
         const val RESTORED_AT = "restoredAt"
         const val RESTORED_BY_UID = "restoredByUid"
+        const val FULL_SPINS = 4
     }
 }

@@ -24,7 +24,11 @@ fun Throwable.toUserMessage(): String = when (this) {
     is FirebaseNetworkException -> "No hay conexion. Revisa la red e intentalo de nuevo."
     is FirebaseFirestoreException -> when (code) {
         FirebaseFirestoreException.Code.PERMISSION_DENIED -> "Firestore ha rechazado la operacion. Revisa que las reglas de seguridad de esta fase esten desplegadas."
-        FirebaseFirestoreException.Code.UNAVAILABLE -> "Firestore no esta disponible ahora mismo. Intentalo de nuevo."
+        FirebaseFirestoreException.Code.UNAVAILABLE -> if (mentionsUnknownHost()) {
+            "No se puede conectar con Firestore. El dispositivo no resuelve firestore.googleapis.com; revisa internet, DNS o el emulador."
+        } else {
+            "Firestore no esta disponible ahora mismo. Revisa la conexion e intentalo de nuevo."
+        }
         else -> localizedMessage ?: "Error de sincronizacion con Firestore."
     }
     is InvalidJoinCodeException -> message ?: "Codigo no valido."
@@ -37,4 +41,14 @@ fun Throwable.toUserMessage(): String = when (this) {
     is SpinAlreadyRestoredException -> message ?: "Giro ya restaurado."
     is ImportPreviewEmptyException -> message ?: "Archivo sin filas validas."
     else -> localizedMessage ?: "Ha ocurrido un error inesperado."
+}
+
+private fun Throwable.mentionsUnknownHost(): Boolean {
+    return generateSequence(this) { it.cause }
+        .mapNotNull { it.message }
+        .any { message ->
+            message.contains("UnknownHostException", ignoreCase = true) ||
+                message.contains("Unable to resolve host", ignoreCase = true) ||
+                message.contains("firestore.googleapis.com", ignoreCase = true)
+        }
 }

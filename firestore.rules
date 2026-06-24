@@ -318,7 +318,14 @@ service cloud.firestore {
         allow create, update: if isMember(sessionId)
           && stateId == 'game'
           && request.resource.data.keys().hasOnly(gameStateKeys())
-          && request.resource.data.phase in ['IDLE', 'CONTENT_SPINNING', 'COMPLETED', 'EXHAUSTED'];
+          && request.resource.data.phase in [
+            'IDLE',
+            'CATEGORY_SPINNING',
+            'CATEGORY_SELECTED',
+            'CONTENT_SPINNING',
+            'COMPLETED',
+            'EXHAUSTED'
+          ];
         allow delete: if isOwner(sessionId);
       }
 
