@@ -1,0 +1,367 @@
+﻿rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function userKeys() {
+      return ['uid', 'displayName', 'email', 'createdAt', 'updatedAt', 'lastSeenAt'];
+    }
+
+    function sessionKeys() {
+      return [
+        'eventName',
+        'groomName',
+        'groomPhotoUrl',
+        'startsAt',
+        'endsAt',
+        'joinCode',
+        'ownerUid',
+        'ownerDisplayName',
+        'status',
+        'timeZone',
+        'memberCount',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function memberKeys() {
+      return ['uid', 'displayName', 'email', 'role', 'active', 'joinedWithCode', 'joinedAt', 'updatedAt'];
+    }
+
+    function sessionRefKeys() {
+      return ['sessionId', 'eventName', 'groomName', 'joinCode', 'role', 'status', 'joinedWithCode', 'createdAt', 'updatedAt'];
+    }
+
+    function joinCodeKeys() {
+      return ['sessionId', 'active', 'createdAt', 'createdBy', 'updatedAt'];
+    }
+
+    function rouletteCategory(value) {
+      return value in ['QUESTION', 'CHALLENGE', 'PUNISHMENT'];
+    }
+
+    function contentKeys() {
+      return [
+        'category',
+        'number',
+        'text',
+        'searchHash',
+        'importHash',
+        'active',
+        'used',
+        'importId',
+        'createdBy',
+        'createdAt',
+        'updatedAt',
+        'usedAt',
+        'usedByUid',
+        'usedByName',
+        'usedSpinId'
+      ];
+    }
+
+    function categoryStatsKeys() {
+      return [
+        'category',
+        'totalCount',
+        'availableCount',
+        'usedCount',
+        'availableContentIds',
+        'contentHashes',
+        'exhausted',
+        'updatedAt'
+      ];
+    }
+
+    function gameStateKeys() {
+      return [
+        'phase',
+        'activeSpinId',
+        'selectedCategory',
+        'selectedContentId',
+        'selectedContentNumber',
+        'selectedContentText',
+        'categoryRotation',
+        'contentRotation',
+        'startedAt',
+        'completedAt',
+        'updatedAt'
+      ];
+    }
+
+    function spinKeys() {
+      return [
+        'spinId',
+        'category',
+        'contentId',
+        'contentNumber',
+        'contentText',
+        'spunByUid',
+        'spunByName',
+        'status',
+        'startedAt',
+        'completedAt',
+        'restoredAt',
+        'restoredByUid',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function importKeys() {
+      return ['importId', 'createdBy', 'createdByName', 'totalValidRows', 'insertedCount', 'skippedCount', 'createdAt'];
+    }
+
+    function auditKeys() {
+      return ['action', 'detail', 'createdBy', 'createdByName', 'createdAt'];
+    }
+
+    function isSixDigitCode(code) {
+      return code is string && code.matches('^\\d{6}$');
+    }
+
+    function hasActiveJoinCodeForSession(sessionId, code) {
+      return isSixDigitCode(code)
+        && existsAfter(/databases/$(database)/documents/joinCodes/$(code))
+        && getAfter(/databases/$(database)/documents/joinCodes/$(code)).data.sessionId == sessionId
+        && getAfter(/databases/$(database)/documents/joinCodes/$(code)).data.active == true;
+    }
+
+    function hasExistingActiveJoinCodeForSession(sessionId, code) {
+      return isSixDigitCode(code)
+        && exists(/databases/$(database)/documents/joinCodes/$(code))
+        && get(/databases/$(database)/documents/joinCodes/$(code)).data.sessionId == sessionId
+        && get(/databases/$(database)/documents/joinCodes/$(code)).data.active == true;
+    }
+
+    function hasActiveMember(sessionId, uid) {
+      return signedIn()
+        && get(/databases/$(database)/documents/sessions/$(sessionId)/members/$(uid)).data.active == true;
+    }
+
+    function isMember(sessionId) {
+      return hasActiveMember(sessionId, request.auth.uid);
+    }
+
+    function isOwner(sessionId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/sessions/$(sessionId)/members/$(request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/sessions/$(sessionId)/members/$(request.auth.uid)).data.role == 'OWNER';
+    }
+
+    function validUserDocument(uid) {
+      return isSelf(uid)
+        && request.resource.data.keys().hasOnly(userKeys())
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.displayName is string;
+    }
+
+    function validSessionCreate(sessionId) {
+      return signedIn()
+        && request.resource.data.keys().hasOnly(sessionKeys())
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'ACTIVE'
+        && request.resource.data.memberCount == 1
+        && isSixDigitCode(request.resource.data.joinCode)
+        && request.resource.data.eventName is string
+        && request.resource.data.groomName is string;
+    }
+
+    function validJoinCodeCreate(code) {
+      return signedIn()
+        && isSixDigitCode(code)
+        && request.resource.data.keys().hasOnly(joinCodeKeys())
+        && request.resource.data.active == true
+        && request.resource.data.createdBy == request.auth.uid
+        && existsAfter(/databases/$(database)/documents/sessions/$(request.resource.data.sessionId))
+        && getAfter(/databases/$(database)/documents/sessions/$(request.resource.data.sessionId)).data.ownerUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/sessions/$(request.resource.data.sessionId)).data.joinCode == code;
+    }
+
+    function validMemberCreate(sessionId, uid) {
+      return isSelf(uid)
+        && request.resource.data.keys().hasOnly(memberKeys())
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.active == true
+        && request.resource.data.role in ['OWNER', 'MEMBER']
+        && hasActiveJoinCodeForSession(sessionId, request.resource.data.joinedWithCode)
+        && existsAfter(/databases/$(database)/documents/sessions/$(sessionId))
+        && (
+          (
+            request.resource.data.role == 'OWNER'
+            && getAfter(/databases/$(database)/documents/sessions/$(sessionId)).data.ownerUid == uid
+          )
+          ||
+          (
+            request.resource.data.role == 'MEMBER'
+            && getAfter(/databases/$(database)/documents/sessions/$(sessionId)).data.ownerUid != uid
+          )
+        );
+    }
+
+    function validSessionRefWrite(uid, sessionId) {
+      return isSelf(uid)
+        && request.resource.data.keys().hasOnly(sessionRefKeys())
+        && request.resource.data.sessionId == sessionId
+        && request.resource.data.role in ['OWNER', 'MEMBER']
+        && hasActiveJoinCodeForSession(sessionId, request.resource.data.joinedWithCode)
+        && existsAfter(/databases/$(database)/documents/sessions/$(sessionId)/members/$(uid))
+        && getAfter(/databases/$(database)/documents/sessions/$(sessionId)/members/$(uid)).data.role == request.resource.data.role
+        && getAfter(/databases/$(database)/documents/sessions/$(sessionId)/members/$(uid)).data.active == true;
+    }
+
+    match /users/{uid} {
+      allow get: if isSelf(uid);
+      allow list: if false;
+      allow create: if validUserDocument(uid);
+      allow update: if validUserDocument(uid)
+        && resource.data.uid == request.resource.data.uid
+        && resource.data.email == request.resource.data.email
+        && resource.data.createdAt == request.resource.data.createdAt;
+      allow delete: if false;
+
+      match /sessionRefs/{sessionId} {
+        allow get, list: if isSelf(uid);
+        allow create, update: if validSessionRefWrite(uid, sessionId);
+        allow delete: if isSelf(uid);
+      }
+    }
+
+    match /joinCodes/{code} {
+      allow get: if signedIn() && isSixDigitCode(code);
+      allow list: if false;
+      allow create: if validJoinCodeCreate(code);
+      allow update: if signedIn()
+        && resource.data.sessionId == request.resource.data.sessionId
+        && isOwner(resource.data.sessionId)
+        && request.resource.data.keys().hasOnly(joinCodeKeys())
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if signedIn() && isOwner(resource.data.sessionId);
+    }
+
+    match /sessions/{sessionId} {
+      allow get: if isMember(sessionId)
+        || (
+          signedIn()
+          && resource.data.status == 'ACTIVE'
+          && hasExistingActiveJoinCodeForSession(sessionId, resource.data.joinCode)
+        );
+      allow list: if false;
+      allow create: if validSessionCreate(sessionId);
+      allow update: if isOwner(sessionId)
+        && request.resource.data.keys().hasOnly(sessionKeys())
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(sessionId);
+
+      match /members/{uid} {
+        allow get: if isMember(sessionId)
+          || (
+            isSelf(uid)
+            && get(/databases/$(database)/documents/sessions/$(sessionId)).data.status == 'ACTIVE'
+            && hasExistingActiveJoinCodeForSession(
+              sessionId,
+              get(/databases/$(database)/documents/sessions/$(sessionId)).data.joinCode
+            )
+          );
+        allow list: if isMember(sessionId);
+        allow create: if validMemberCreate(sessionId, uid);
+        allow update: if false;
+        allow delete: if false;
+      }
+
+      match /content/{contentId} {
+        allow read: if isMember(sessionId);
+        allow create: if isOwner(sessionId)
+          && request.resource.data.keys().hasOnly(contentKeys())
+          && rouletteCategory(request.resource.data.category)
+          && request.resource.data.number is int
+          && request.resource.data.text is string
+          && request.resource.data.active is bool
+          && request.resource.data.used is bool;
+        allow update: if isMember(sessionId)
+          && request.resource.data.keys().hasOnly(contentKeys())
+          && rouletteCategory(request.resource.data.category)
+          && request.resource.data.number is int
+          && request.resource.data.text is string
+          && request.resource.data.active is bool
+          && request.resource.data.used is bool;
+        allow delete: if isOwner(sessionId);
+      }
+
+      match /categoryStats/{category} {
+        allow read: if isMember(sessionId);
+        allow create, update: if isMember(sessionId)
+          && rouletteCategory(category)
+          && request.resource.data.keys().hasOnly(categoryStatsKeys())
+          && request.resource.data.category == category
+          && request.resource.data.totalCount is int
+          && request.resource.data.availableCount is int
+          && request.resource.data.usedCount is int
+          && request.resource.data.availableContentIds is list
+          && request.resource.data.contentHashes is list;
+        allow delete: if false;
+      }
+
+      match /state/{stateId} {
+        allow read: if isMember(sessionId);
+        allow create, update: if isMember(sessionId)
+          && stateId == 'game'
+          && request.resource.data.keys().hasOnly(gameStateKeys())
+          && request.resource.data.phase in ['IDLE', 'CONTENT_SPINNING', 'COMPLETED', 'EXHAUSTED'];
+        allow delete: if isOwner(sessionId);
+      }
+
+      match /spins/{spinId} {
+        allow read: if isMember(sessionId);
+        allow create: if isMember(sessionId)
+          && request.resource.data.keys().hasOnly(spinKeys())
+          && request.resource.data.spinId == spinId
+          && rouletteCategory(request.resource.data.category)
+          && request.resource.data.spunByUid == request.auth.uid
+          && request.resource.data.status in ['SPINNING', 'COMPLETED', 'RESTORED'];
+        allow update: if isMember(sessionId)
+          && request.resource.data.keys().hasOnly(spinKeys())
+          && request.resource.data.spinId == resource.data.spinId
+          && request.resource.data.category == resource.data.category
+          && request.resource.data.contentId == resource.data.contentId;
+        allow delete: if false;
+      }
+
+      match /imports/{importId} {
+        allow read: if isOwner(sessionId);
+        allow create: if isOwner(sessionId)
+          && request.resource.data.keys().hasOnly(importKeys())
+          && request.resource.data.importId == importId
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      match /auditLogs/{auditId} {
+        allow read: if isOwner(sessionId);
+        allow create: if isMember(sessionId)
+          && request.resource.data.keys().hasOnly(auditKeys())
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,26 @@
+﻿package com.example.despedidaruleta.core.navigation
+
+object AppRoutes {
+    const val Splash = "splash"
+    const val Welcome = "welcome"
+    const val Login = "login"
+    const val Register = "register"
+    const val ResetPassword = "resetPassword"
+    const val Sessions = "sessions"
+    const val CreateSession = "sessions/create"
+    const val JoinSession = "sessions/join"
+    const val SessionHome = "session/{sessionId}"
+    const val SessionSettings = "session/{sessionId}/settings"
+    const val SessionWheel = "session/{sessionId}/wheel"
+    const val SessionAdmin = "session/{sessionId}/admin"
+    const val SessionHistory = "session/{sessionId}/history"
+    const val LocalSettings = "session/{sessionId}/local-settings"
+    const val SessionIdArg = "sessionId"
+
+    fun sessionHome(sessionId: String): String = "session/$sessionId"
+    fun sessionSettings(sessionId: String): String = "session/$sessionId/settings"
+    fun sessionWheel(sessionId: String): String = "session/$sessionId/wheel"
+    fun sessionAdmin(sessionId: String): String = "session/$sessionId/admin"
+    fun sessionHistory(sessionId: String): String = "session/$sessionId/history"
+    fun localSettings(sessionId: String): String = "session/$sessionId/local-settings"
+}
