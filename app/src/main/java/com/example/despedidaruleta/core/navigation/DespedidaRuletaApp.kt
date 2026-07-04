@@ -25,6 +25,8 @@ import com.example.despedidaruleta.feature.auth.ResetPasswordViewModel
 import com.example.despedidaruleta.feature.auth.WelcomeScreen
 import com.example.despedidaruleta.feature.history.HistoryScreen
 import com.example.despedidaruleta.feature.history.HistoryViewModel
+import com.example.despedidaruleta.feature.lightning.LightningScreen
+import com.example.despedidaruleta.feature.lightning.LightningViewModel
 import com.example.despedidaruleta.feature.roulette.RouletteScreen
 import com.example.despedidaruleta.feature.roulette.RouletteViewModel
 import com.example.despedidaruleta.feature.session.SessionHomeScreen
@@ -249,6 +251,7 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
             SessionHomeScreen(
                 uiState = uiState,
                 onOpenWheel = { navController.navigate(AppRoutes.sessionWheel(sessionId)) },
+                onOpenLightning = { navController.navigate(AppRoutes.sessionLightning(sessionId)) },
                 onOpenAdmin = { navController.navigate(AppRoutes.sessionAdmin(sessionId)) },
                 onOpenHistory = { navController.navigate(AppRoutes.sessionHistory(sessionId)) },
                 onOpenLocalSettings = { navController.navigate(AppRoutes.localSettings(sessionId)) },
@@ -323,6 +326,33 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                 onOpenAdmin = { navController.navigate(AppRoutes.sessionAdmin(sessionId)) },
                 onOpenHistory = { navController.navigate(AppRoutes.sessionHistory(sessionId)) },
                 onOpenLocalSettings = { navController.navigate(AppRoutes.localSettings(sessionId)) },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = AppRoutes.SessionLightning,
+            arguments = listOf(navArgument(AppRoutes.SessionIdArg) { type = NavType.StringType })
+        ) { backStackEntry ->
+            val sessionId = requireNotNull(backStackEntry.arguments?.getString(AppRoutes.SessionIdArg))
+            val factory = remember(container, sessionId) {
+                viewModelFactory {
+                    initializer {
+                        LightningViewModel(
+                            sessionId = sessionId,
+                            authRepository = container.authRepository,
+                            rouletteRepository = container.rouletteRepository,
+                            connectivityRepository = container.connectivityRepository
+                        )
+                    }
+                }
+            }
+            val viewModel: LightningViewModel = viewModel(factory = factory)
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            LightningScreen(
+                uiState = uiState,
+                onStartRound = viewModel::startRound,
+                onAnswer = viewModel::answer,
                 onBack = { navController.popBackStack() }
             )
         }

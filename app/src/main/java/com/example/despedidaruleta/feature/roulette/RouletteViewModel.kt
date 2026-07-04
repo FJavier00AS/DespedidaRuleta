@@ -34,8 +34,12 @@ data class RouletteUiState(
     val errorMessage: String? = null,
     val infoMessage: String? = null
 ) {
-    val totalAvailable: Int = stats.sumOf { it.availableCount }
-    val totalUsed: Int = stats.sumOf { it.usedCount }
+    val totalAvailable: Int = stats
+        .filter { it.category in RouletteCategory.wheelEntries }
+        .sumOf { it.availableCount }
+    val totalUsed: Int = stats
+        .filter { it.category in RouletteCategory.wheelEntries }
+        .sumOf { it.usedCount }
     val categorySpinInProgress: Boolean = gameState.phase == GamePhase.CATEGORY_SPINNING
     val contentSpinInProgress: Boolean = gameState.phase == GamePhase.CONTENT_SPINNING
     val canSpinCategory: Boolean = !actionLoading && !categorySpinInProgress && !contentSpinInProgress && totalAvailable > 0

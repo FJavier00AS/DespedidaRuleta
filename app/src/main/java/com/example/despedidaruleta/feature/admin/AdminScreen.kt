@@ -88,7 +88,7 @@ fun AdminScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(text = "Prueba rapida", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        text = "Carga preguntas, retos y castigos inventados para probar la ruleta sin preparar archivos.",
+                        text = "Carga preguntas, retos, ronda relampago y castigos inventados para probar la ruleta sin preparar archivos.",
                         color = VegasColors.TextSecondary,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -125,7 +125,18 @@ fun AdminScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    VegasSecondaryButton(text = "Castigos", onClick = { openFile(RouletteCategory.PUNISHMENT) })
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        VegasSecondaryButton(
+                            text = "Relampago",
+                            onClick = { openFile(RouletteCategory.LIGHTNING) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        VegasSecondaryButton(
+                            text = "Castigos",
+                            onClick = { openFile(RouletteCategory.PUNISHMENT) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 

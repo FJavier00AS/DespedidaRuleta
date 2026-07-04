@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -82,8 +83,14 @@ fun VegasBackground(
                     )
                 )
         )
-        CompositionLocalProvider(LocalContentColor provides VegasColors.TextPrimary) {
-            content()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+        ) {
+            CompositionLocalProvider(LocalContentColor provides VegasColors.TextPrimary) {
+                content()
+            }
         }
     }
 }

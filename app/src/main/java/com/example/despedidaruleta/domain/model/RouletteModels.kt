@@ -5,9 +5,13 @@ import kotlin.math.absoluteValue
 enum class RouletteCategory(val firestoreValue: String, val label: String) {
     QUESTION("QUESTION", "Preguntas"),
     CHALLENGE("CHALLENGE", "Retos"),
+    LIGHTNING("LIGHTNING", "Ronda relampago"),
     PUNISHMENT("PUNISHMENT", "Castigos");
 
     companion object {
+        // La ronda relampago se juega fuera de la ruleta: no participa en los giros de categoria.
+        val wheelEntries: List<RouletteCategory> = listOf(QUESTION, CHALLENGE, PUNISHMENT)
+
         fun fromFirestore(value: String?): RouletteCategory? = entries.firstOrNull { it.firestoreValue == value }
 
         fun parse(value: String): RouletteCategory? {
@@ -15,6 +19,7 @@ enum class RouletteCategory(val firestoreValue: String, val label: String) {
             return when (normalized) {
                 "question", "questions", "pregunta", "preguntas", "q" -> QUESTION
                 "challenge", "challenges", "reto", "retos", "r" -> CHALLENGE
+                "lightning", "ronda relampago", "ronda relámpago", "relampago", "relámpago", "rr" -> LIGHTNING
                 "punishment", "punishments", "castigo", "castigos", "c" -> PUNISHMENT
                 else -> null
             }

@@ -44,7 +44,7 @@ service cloud.firestore {
     }
 
     function rouletteCategory(value) {
-      return value in ['QUESTION', 'CHALLENGE', 'PUNISHMENT'];
+      return value in ['QUESTION', 'CHALLENGE', 'LIGHTNING', 'PUNISHMENT'];
     }
 
     function contentKeys() {

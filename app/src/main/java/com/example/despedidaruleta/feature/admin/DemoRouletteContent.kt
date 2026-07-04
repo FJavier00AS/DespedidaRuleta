@@ -7,6 +7,7 @@ object DemoRouletteContent {
     fun rows(): List<ImportRow> = buildList {
         addAll(questionRows())
         addAll(challengeRows())
+        addAll(lightningRows())
         addAll(punishmentRows())
     }
 
@@ -37,6 +38,19 @@ object DemoRouletteContent {
         "Elige a alguien para recrear una escena dramatica de telenovela con el novio.",
         "Inventa un lema oficial para la despedida y haz que todos lo repitan."
     ).mapIndexed { index, text -> demoRow(RouletteCategory.CHALLENGE, index + 1, text) }
+
+    private fun lightningRows(): List<ImportRow> = listOf(
+        "Comida favorita de tu pareja?",
+        "Fecha exacta de vuestro primer beso?",
+        "Numero de calzado de tu pareja?",
+        "Destino sonado de tu pareja para la luna de miel?",
+        "Cancion que pondria tu pareja en la boda?",
+        "Nombre completo de tu suegra?",
+        "Que le molesta mas a tu pareja de ti?",
+        "Color favorito de tu pareja?",
+        "Primer regalo que le hiciste a tu pareja?",
+        "Serie que tu pareja ha visto mas veces?"
+    ).mapIndexed { index, text -> demoRow(RouletteCategory.LIGHTNING, index + 1, text) }
 
     private fun punishmentRows(): List<ImportRow> = listOf(
         "Durante la siguiente ronda solo puedes hablar como si fueras un mayordomo serio.",

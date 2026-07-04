@@ -159,7 +159,7 @@ private fun CategoryWheelPanel(
     onSpinCategory: () -> Unit
 ) {
     val totalAvailable = uiState.totalAvailable.coerceAtLeast(0)
-    val segments = RouletteCategory.entries.map { category ->
+    val segments = RouletteCategory.wheelEntries.map { category ->
         val stats = uiState.stats.firstOrNull { it.category == category }
         val available = stats?.availableCount ?: 0
         val percent = if (totalAvailable > 0) ((available * 100f) / totalAvailable).roundToInt() else 0
@@ -176,7 +176,7 @@ private fun CategoryWheelPanel(
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(text = "Ruleta principal", style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
             Text(
-                text = "La probabilidad depende del contenido disponible: mas preguntas, retos o castigos equivale a mas espacio en la ruleta.",
+                text = "La probabilidad depende del contenido disponible: cuanto mas contenido libre tiene una categoria, mas espacio ocupa en la ruleta.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = VegasColors.TextSecondary,
                 textAlign = TextAlign.Center
@@ -410,7 +410,7 @@ private fun StatsPanel(uiState: RouletteUiState) {
     VegasCard {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(text = "Disponibilidad", style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
-            RouletteCategory.entries.forEach { category ->
+            RouletteCategory.wheelEntries.forEach { category ->
                 val stats = uiState.stats.firstOrNull { it.category == category }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(text = category.label, color = category.segmentColor(), fontWeight = FontWeight.SemiBold)
@@ -484,6 +484,7 @@ private data class WheelSegment(
 private fun RouletteCategory.segmentColor(): Color = when (this) {
     RouletteCategory.QUESTION -> VegasColors.NeonCyan
     RouletteCategory.CHALLENGE -> VegasColors.Gold
+    RouletteCategory.LIGHTNING -> VegasColors.NeonPurple
     RouletteCategory.PUNISHMENT -> VegasColors.Red
 }
 
@@ -495,12 +496,15 @@ private fun RouletteCategory.segmentTextColor(): Color = when (this) {
 private fun RouletteCategory.shortLabel(): String = when (this) {
     RouletteCategory.QUESTION -> "Preguntas"
     RouletteCategory.CHALLENGE -> "Retos"
+    RouletteCategory.LIGHTNING -> "Relampago"
     RouletteCategory.PUNISHMENT -> "Castigos"
 }
 
 private fun categoryWheelTitle(category: RouletteCategory): String = when (category) {
     RouletteCategory.QUESTION -> "Ruleta de preguntas"
     RouletteCategory.CHALLENGE -> "Ruleta de retos"
+    // La ronda relampago no usa ruleta de contenido; rama necesaria por exhaustividad.
+    RouletteCategory.LIGHTNING -> "Ronda relampago"
     RouletteCategory.PUNISHMENT -> "Ruleta de castigos"
 }
 
@@ -514,5 +518,6 @@ private fun contentWheelMessage(uiState: RouletteUiState, category: RouletteCate
 private fun resultTitle(category: RouletteCategory): String = when (category) {
     RouletteCategory.QUESTION -> "Pregunta"
     RouletteCategory.CHALLENGE -> "Reto"
+    RouletteCategory.LIGHTNING -> "Ronda relampago"
     RouletteCategory.PUNISHMENT -> "Castigo"
 }
