@@ -34,8 +34,8 @@ data class RouletteUiState(
     val errorMessage: String? = null,
     val infoMessage: String? = null
 ) {
-    val totalAvailable: Int = stats.sumOf { it.availableCount }
-    val totalUsed: Int = stats.sumOf { it.usedCount }
+    val totalAvailable: Int = stats.filter { it.category in RouletteCategory.wheelEntries }.sumOf { it.availableCount }
+    val totalUsed: Int = stats.filter { it.category in RouletteCategory.wheelEntries }.sumOf { it.usedCount }
     val categorySpinInProgress: Boolean = gameState.phase == GamePhase.CATEGORY_SPINNING
     val contentSpinInProgress: Boolean = gameState.phase == GamePhase.CONTENT_SPINNING
     val canSpinCategory: Boolean = !actionLoading && !categorySpinInProgress && !contentSpinInProgress && totalAvailable > 0
@@ -131,36 +131,6 @@ class RouletteViewModel(
         }
     }
 
-    fun openLightningSection() {
-        val user = authRepository.currentUser
-        if (user == null) {
-            _uiState.update { it.copy(errorMessage = "Inicia sesion de nuevo.") }
-            return
-        }
-        viewModelScope.launch {
-            _uiState.update { it.copy(actionLoading = true, errorMessage = null, infoMessage = null) }
-            try {
-                rouletteRepository.startLightningRound(user, sessionId, LIGHTNING_ROUND_SIZE)
-                _uiState.update { it.copy(actionLoading = false, infoMessage = "Ronda relámpago lista. Responde rápido.") }
-            } catch (error: Throwable) {
-                _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
-            }
-        }
-    }
-
-    fun closeLightningSummary() {
-        val user = authRepository.currentUser ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(actionLoading = true, errorMessage = null) }
-            try {
-                rouletteRepository.closeLightningRound(user, sessionId)
-                _uiState.update { it.copy(actionLoading = false, infoMessage = "Ruleta lista para otro giro.") }
-            } catch (error: Throwable) {
-                _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
-            }
-        }
-    }
-
     fun spinContent() {
         val user = authRepository.currentUser
         if (user == null) {
@@ -199,9 +169,6 @@ class RouletteViewModel(
                 if (!success && selectedCategory == RouletteCategory.QUESTION) {
                     rouletteRepository.openPunishmentWheel(user, sessionId)
                     _uiState.update { it.copy(actionLoading = false, infoMessage = "Fallo registrado. Gira la ruleta de castigos.") }
-                } else if (selectedCategory == RouletteCategory.CHALLENGE) {
-                    rouletteRepository.advanceLightningRound(user, sessionId, success)
-                    _uiState.update { it.copy(actionLoading = false) }
                 } else {
                     rouletteRepository.returnToCategoryWheel(user, sessionId)
                     val message = if (selectedCategory == RouletteCategory.QUESTION && success) {
@@ -239,7 +206,6 @@ class RouletteViewModel(
     }
 
     private companion object {
-        const val LIGHTNING_ROUND_SIZE = 10
         val PRIZE_MESSAGES = listOf(
             "¡Premio! Respuesta correcta. Cobra tu billete falso del banco.",
             "¡Acertaste! El banco te debe un billete de mentira.",

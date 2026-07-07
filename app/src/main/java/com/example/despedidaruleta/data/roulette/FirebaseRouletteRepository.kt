@@ -17,7 +17,6 @@ import com.example.despedidaruleta.domain.model.SpinAlreadyRestoredException
 import com.example.despedidaruleta.domain.model.SpinNotFoundException
 import com.example.despedidaruleta.domain.model.SpinRecord
 import com.example.despedidaruleta.domain.model.SpinStatus
-import com.example.despedidaruleta.domain.model.contentSourceCategory
 import com.example.despedidaruleta.domain.model.normalizedContentHash
 import com.example.despedidaruleta.domain.repository.RouletteRepository
 import com.google.firebase.Timestamp
@@ -254,7 +253,7 @@ class FirebaseRouletteRepository(
             val sessionSnapshot = transaction.get(sessionRef)
             assertMember(sessionId, sessionSnapshot, user.uid, transaction)
 
-            val sourceCategory = category.contentSourceCategory()
+            val sourceCategory = category
             val selectedStats = transaction.get(statsRef(sessionId, sourceCategory)).toCategoryStats(sourceCategory)
             if (selectedStats.totalCount == 0) throw RouletteContentMissingException()
             if (selectedStats.availableContentIds.isEmpty() || selectedStats.availableCount <= 0) throw RouletteExhaustedException()
@@ -393,7 +392,7 @@ class FirebaseRouletteRepository(
         firestore.runTransaction { transaction ->
             val sessionSnapshot = transaction.get(sessionRef)
             assertMember(sessionId, sessionSnapshot, user.uid, transaction)
-            val sourceCategory = category.contentSourceCategory()
+            val sourceCategory = category
             val stats = transaction.get(statsRef(sessionId, sourceCategory)).toCategoryStats(sourceCategory)
             if (stats.totalCount == 0) throw RouletteContentMissingException()
             if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
@@ -421,140 +420,70 @@ class FirebaseRouletteRepository(
         }.await()
     }
 
-    override suspend fun startLightningRound(user: AuthUser, sessionId: String, roundSize: Int) {
+    override suspend fun drawLightningQuestions(user: AuthUser, sessionId: String): List<ContentItem> {
         val sessionRef = sessionRef(sessionId)
-        val stateRef = sessionRef.collection(STATE).document(GAME)
-        val now = Date()
-        firestore.runTransaction { transaction ->
+        val nowMillis = System.currentTimeMillis()
+        val now = Date(nowMillis)
+
+        return firestore.runTransaction { transaction ->
             val sessionSnapshot = transaction.get(sessionRef)
             assertMember(sessionId, sessionSnapshot, user.uid, transaction)
-            val stats = transaction.get(statsRef(sessionId, RouletteCategory.QUESTION)).toCategoryStats(RouletteCategory.QUESTION)
+
+            val stats = transaction.get(statsRef(sessionId, RouletteCategory.LIGHTNING)).toCategoryStats(RouletteCategory.LIGHTNING)
             if (stats.totalCount == 0) throw RouletteContentMissingException()
             if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
-            val total = minOf(roundSize, stats.availableCount)
-            val previousRotation = transaction.get(stateRef).getDouble(CATEGORY_ROTATION)?.toFloat() ?: 0f
 
-            transaction.set(
-                stateRef,
-                mapOf(
-                    PHASE to GamePhase.CATEGORY_SELECTED.firestoreValue,
-                    ACTIVE_SPIN_ID to null,
-                    SELECTED_CATEGORY to RouletteCategory.CHALLENGE.firestoreValue,
-                    SELECTED_CONTENT_ID to null,
-                    SELECTED_CONTENT_NUMBER to null,
-                    SELECTED_CONTENT_TEXT to null,
-                    CATEGORY_ROTATION to targetCategoryRotation(
-                        previousRotation,
-                        mapOf(RouletteCategory.CHALLENGE to stats),
-                        RouletteCategory.CHALLENGE
-                    ),
-                    CONTENT_ROTATION to 0f,
-                    STARTED_AT to now,
-                    COMPLETED_AT to null,
-                    UPDATED_AT to now,
-                    LIGHTNING_TOTAL to total,
-                    LIGHTNING_ANSWERED to 0,
-                    LIGHTNING_CORRECT to 0
-                ),
-                SetOptions.merge()
-            )
-            transaction.set(auditRef(sessionId), auditMap(user, "START_LIGHTNING_ROUND", "total=$total"))
-            null
-        }.await()
-    }
+            // Juego unico: se reservan todas las preguntas disponibles en una sola tirada.
+            val selectedIds = stats.availableContentIds.shuffled()
+            val items = selectedIds
+                .map { id -> transaction.get(sessionRef.collection(CONTENT).document(id)) }
+                .mapNotNull { it.toContentItem() }
+                .filter { it.active && !it.used && it.category == RouletteCategory.LIGHTNING }
+            if (items.isEmpty()) throw RouletteExhaustedException()
 
-    override suspend fun advanceLightningRound(user: AuthUser, sessionId: String, success: Boolean) {
-        val sessionRef = sessionRef(sessionId)
-        val stateRef = sessionRef.collection(STATE).document(GAME)
-        val now = Date()
-        firestore.runTransaction { transaction ->
-            val sessionSnapshot = transaction.get(sessionRef)
-            assertMember(sessionId, sessionSnapshot, user.uid, transaction)
-            val stateSnapshot = transaction.get(stateRef)
-            val total = stateSnapshot.getLong(LIGHTNING_TOTAL)?.toInt() ?: 0
-            val answeredSoFar = stateSnapshot.getLong(LIGHTNING_ANSWERED)?.toInt() ?: 0
-            val correctSoFar = stateSnapshot.getLong(LIGHTNING_CORRECT)?.toInt() ?: 0
-            val newAnswered = answeredSoFar + 1
-            val newCorrect = correctSoFar + if (success) 1 else 0
-
-            if (total <= 0 || newAnswered >= total) {
-                transaction.set(
-                    stateRef,
-                    mapOf(
-                        PHASE to GamePhase.LIGHTNING_SUMMARY.firestoreValue,
-                        ACTIVE_SPIN_ID to null,
-                        SELECTED_CONTENT_ID to null,
-                        SELECTED_CONTENT_NUMBER to null,
-                        SELECTED_CONTENT_TEXT to null,
-                        COMPLETED_AT to now,
-                        UPDATED_AT to now,
-                        LIGHTNING_ANSWERED to newAnswered,
-                        LIGHTNING_CORRECT to newCorrect
-                    ),
-                    SetOptions.merge()
+            items.forEach { item ->
+                val spinRef = sessionRef.collection(SPINS).document()
+                val record = SpinRecord(
+                    id = spinRef.id,
+                    category = item.category,
+                    contentId = item.id,
+                    contentNumber = item.number,
+                    contentText = item.text,
+                    spunByUid = user.uid,
+                    spunByName = user.displayName,
+                    status = SpinStatus.COMPLETED,
+                    startedAtMillis = nowMillis,
+                    completedAtMillis = nowMillis,
+                    restoredAtMillis = null,
+                    restoredByUid = null
                 )
-            } else {
-                val stats = transaction.get(statsRef(sessionId, RouletteCategory.QUESTION)).toCategoryStats(RouletteCategory.QUESTION)
-                if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
-                val previousRotation = stateSnapshot.getDouble(CATEGORY_ROTATION)?.toFloat() ?: 0f
-                transaction.set(
-                    stateRef,
+                transaction.update(
+                    sessionRef.collection(CONTENT).document(item.id),
                     mapOf(
-                        PHASE to GamePhase.CATEGORY_SELECTED.firestoreValue,
-                        ACTIVE_SPIN_ID to null,
-                        SELECTED_CATEGORY to RouletteCategory.CHALLENGE.firestoreValue,
-                        SELECTED_CONTENT_ID to null,
-                        SELECTED_CONTENT_NUMBER to null,
-                        SELECTED_CONTENT_TEXT to null,
-                        CATEGORY_ROTATION to targetCategoryRotation(
-                            previousRotation,
-                            mapOf(RouletteCategory.CHALLENGE to stats),
-                            RouletteCategory.CHALLENGE
-                        ),
-                        CONTENT_ROTATION to 0f,
-                        STARTED_AT to now,
-                        COMPLETED_AT to null,
-                        UPDATED_AT to now,
-                        LIGHTNING_ANSWERED to newAnswered,
-                        LIGHTNING_CORRECT to newCorrect
-                    ),
-                    SetOptions.merge()
+                        USED to true,
+                        USED_AT to now,
+                        USED_BY_UID to user.uid,
+                        USED_BY_NAME to user.displayName,
+                        USED_SPIN_ID to spinRef.id,
+                        UPDATED_AT to now
+                    )
                 )
+                transaction.set(spinRef, record.toFirestore(now, completedAt = now))
             }
-            transaction.set(auditRef(sessionId), auditMap(user, "ADVANCE_LIGHTNING_ROUND", "answered=$newAnswered/$total correct=$newCorrect"))
-            null
-        }.await()
-    }
 
-    override suspend fun closeLightningRound(user: AuthUser, sessionId: String) {
-        val sessionRef = sessionRef(sessionId)
-        val stateRef = sessionRef.collection(STATE).document(GAME)
-        val now = Date()
-        firestore.runTransaction { transaction ->
-            val sessionSnapshot = transaction.get(sessionRef)
-            assertMember(sessionId, sessionSnapshot, user.uid, transaction)
+            val nextAvailableIds = stats.availableContentIds.filterNot { selectedIds.contains(it) }
+            val updatedStats = stats.copy(
+                availableContentIds = nextAvailableIds,
+                availableCount = nextAvailableIds.size,
+                usedCount = stats.usedCount + items.size
+            )
             transaction.set(
-                stateRef,
-                mapOf(
-                    PHASE to GamePhase.IDLE.firestoreValue,
-                    ACTIVE_SPIN_ID to null,
-                    SELECTED_CATEGORY to null,
-                    SELECTED_CONTENT_ID to null,
-                    SELECTED_CONTENT_NUMBER to null,
-                    SELECTED_CONTENT_TEXT to null,
-                    CATEGORY_ROTATION to 0f,
-                    CONTENT_ROTATION to 0f,
-                    STARTED_AT to null,
-                    COMPLETED_AT to null,
-                    UPDATED_AT to now,
-                    LIGHTNING_TOTAL to 0,
-                    LIGHTNING_ANSWERED to 0,
-                    LIGHTNING_CORRECT to 0
-                ),
+                statsRef(sessionId, RouletteCategory.LIGHTNING),
+                updatedStats.toMutableStats().toFirestore(RouletteCategory.LIGHTNING),
                 SetOptions.merge()
             )
-            transaction.set(auditRef(sessionId), auditMap(user, "CLOSE_LIGHTNING_ROUND", ""))
-            null
+            transaction.set(auditRef(sessionId), auditMap(user, "LIGHTNING_ROUND", "count=${items.size}"))
+            items
         }.await()
     }
 
@@ -787,10 +716,7 @@ class FirebaseRouletteRepository(
             contentRotation = getDouble(CONTENT_ROTATION)?.toFloat() ?: 0f,
             startedAtMillis = getTimestampMillis(STARTED_AT),
             completedAtMillis = getTimestampMillis(COMPLETED_AT),
-            updatedAtMillis = getTimestampMillis(UPDATED_AT),
-            lightningTotal = getLong(LIGHTNING_TOTAL)?.toInt() ?: 0,
-            lightningAnswered = getLong(LIGHTNING_ANSWERED)?.toInt() ?: 0,
-            lightningCorrect = getLong(LIGHTNING_CORRECT)?.toInt() ?: 0
+            updatedAtMillis = getTimestampMillis(UPDATED_AT)
         )
     }
 
@@ -845,7 +771,7 @@ class FirebaseRouletteRepository(
         )
     }
 
-    private fun SpinRecord.toFirestore(now: Date): Map<String, Any?> = mapOf(
+    private fun SpinRecord.toFirestore(now: Date, completedAt: Date? = null): Map<String, Any?> = mapOf(
         SPIN_ID to id,
         CATEGORY to category.firestoreValue,
         CONTENT_ID to contentId,
@@ -855,7 +781,7 @@ class FirebaseRouletteRepository(
         SPUN_BY_NAME to spunByName,
         STATUS to status.firestoreValue,
         STARTED_AT to now,
-        COMPLETED_AT to null,
+        COMPLETED_AT to completedAt,
         RESTORED_AT to null,
         RESTORED_BY_UID to null,
         CREATED_AT to now,
@@ -951,9 +877,6 @@ class FirebaseRouletteRepository(
         const val CONTENT_ROTATION = "contentRotation"
         const val STARTED_AT = "startedAt"
         const val COMPLETED_AT = "completedAt"
-        const val LIGHTNING_TOTAL = "lightningTotal"
-        const val LIGHTNING_ANSWERED = "lightningAnswered"
-        const val LIGHTNING_CORRECT = "lightningCorrect"
 
         const val SPIN_ID = "spinId"
         const val CONTENT_ID = "contentId"

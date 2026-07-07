@@ -2,11 +2,16 @@ package com.example.despedidaruleta.feature.events
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.despedidaruleta.core.common.toUserMessage
 import com.example.despedidaruleta.core.navigation.AppRoutes
 import com.example.despedidaruleta.core.notification.NotificationRelayClient
 import com.example.despedidaruleta.domain.model.ContentItem
+import com.example.despedidaruleta.domain.model.EventsState
+import com.example.despedidaruleta.domain.model.LocalUserSettings
 import com.example.despedidaruleta.domain.model.RouletteCategory
 import com.example.despedidaruleta.domain.repository.AuthRepository
+import com.example.despedidaruleta.domain.repository.EventsRepository
+import com.example.despedidaruleta.domain.repository.LocalSettingsRepository
 import com.example.despedidaruleta.domain.repository.RouletteRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -14,25 +19,26 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 data class EventsUiState(
     val isActive: Boolean = false,
+    val awaitingCompletion: Boolean = false,
     val currentEvent: ContentItem? = null,
     val history: List<ContentItem> = emptyList(),
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
-    val isPaused: Boolean = false,
-    val awaitingCompletion: Boolean = false
+    val settings: LocalUserSettings = LocalUserSettings()
 )
 
 class EventsViewModel(
     private val sessionId: String,
     private val authRepository: AuthRepository,
     private val rouletteRepository: RouletteRepository,
+    private val eventsRepository: EventsRepository,
+    localSettingsRepository: LocalSettingsRepository,
     private val notificationRelayClient: NotificationRelayClient
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(EventsUiState())
@@ -40,106 +46,103 @@ class EventsViewModel(
 
     private var tickerJob: Job? = null
     private var availableEvents: List<ContentItem> = emptyList()
-    private var lastEventId: String? = null
-    private var lastEventTimestampMs: Long = 0L
-    private var nextEventTimestampMs: Long = 0L
+    private var latestState: EventsState = EventsState()
 
     init {
         viewModelScope.launch {
+            localSettingsRepository.settings.collect { settings ->
+                _uiState.update { it.copy(settings = settings) }
+            }
+        }
+        viewModelScope.launch {
             rouletteRepository.observeContent(sessionId)
                 .catch { error ->
-                    _uiState.update { it.copy(isLoading = false, errorMessage = error.message ?: "No se pudieron cargar los eventos") }
+                    _uiState.update { it.copy(errorMessage = error.message ?: "No se pudieron cargar los eventos") }
                 }
                 .collect { value ->
                     availableEvents = value.data.filter { it.category == RouletteCategory.EVENT && it.active && !it.used }
-                    val currentEvent = if (_uiState.value.isActive && !_uiState.value.awaitingCompletion) {
-                        pickNextEvent(availableEvents, _uiState.value.currentEvent?.id)
-                    } else {
-                        _uiState.value.currentEvent
-                    }
-                    val nextHistory = if (currentEvent != null && !_uiState.value.history.contains(currentEvent)) {
-                        listOf(currentEvent) + _uiState.value.history.take(4)
-                    } else {
-                        _uiState.value.history
-                    }
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            errorMessage = null,
-                            currentEvent = currentEvent,
-                            history = nextHistory
-                        )
-                    }
-                    if (_uiState.value.isActive) startTicker(availableEvents)
+                    applyDisplay()
                 }
+        }
+        viewModelScope.launch {
+            eventsRepository.observeEventsState(sessionId)
+                .catch { error ->
+                    _uiState.update { it.copy(isLoading = false, errorMessage = error.message ?: "No se pudo sincronizar el estado de eventos") }
+                }
+                .collect { value ->
+                    latestState = value.data
+                    applyDisplay()
+                    manageTicker()
+                }
+        }
+    }
+
+    override fun onCleared() {
+        tickerJob?.cancel()
+    }
+
+    private fun applyDisplay() {
+        val state = latestState
+        val currentEvent = state.currentEventId?.let { id -> availableEvents.firstOrNull { it.id == id } }
+        val history = state.historyIds.mapNotNull { id -> availableEvents.firstOrNull { it.id == id } }
+        _uiState.update {
+            it.copy(
+                isActive = state.isActive,
+                awaitingCompletion = state.awaitingCompletion,
+                currentEvent = currentEvent,
+                history = history,
+                isLoading = false
+            )
         }
     }
 
     fun toggleActive() {
-        val nextActive = !_uiState.value.isActive
-        _uiState.update { it.copy(isActive = nextActive) }
-
-        if (!nextActive) {
-            tickerJob?.cancel()
+        val user = authRepository.currentUser
+        if (user == null) {
+            _uiState.update { it.copy(errorMessage = "Inicia sesion de nuevo.") }
             return
         }
-
+        val turningOn = !_uiState.value.isActive
         viewModelScope.launch {
-            val events = availableEvents.ifEmpty {
-                rouletteRepository.observeContent(sessionId).firstOrNull()?.data
-                    ?.filter { it.category == RouletteCategory.EVENT && it.active && !it.used }
-                    .orEmpty()
+            runCatching {
+                eventsRepository.setEventsActive(user, sessionId, turningOn, availableEvents.map { it.id })
+            }.onFailure { error ->
+                _uiState.update { it.copy(errorMessage = error.toUserMessage()) }
             }
-            if (events.isEmpty()) {
-                _uiState.update { it.copy(errorMessage = "No hay eventos disponibles.") }
-                return@launch
-            }
-            availableEvents = events
-            val nextEvent = pickNextEvent(events, null)
-            lastEventId = nextEvent?.id
-            _uiState.update {
-                it.copy(
-                    currentEvent = nextEvent,
-                    history = if (nextEvent != null) listOf(nextEvent) else emptyList(),
-                    isPaused = false,
-                    awaitingCompletion = nextEvent != null
-                )
-            }
-            startTicker(events)
         }
     }
 
     fun markCurrentEventCompleted() {
-        if (_uiState.value.currentEvent == null || !_uiState.value.awaitingCompletion) return
-        val now = System.currentTimeMillis()
-        lastEventTimestampMs = now
-        nextEventTimestampMs = now + randomIntervalMs()
-        _uiState.update { it.copy(awaitingCompletion = false) }
+        val user = authRepository.currentUser
+        if (user == null) {
+            _uiState.update { it.copy(errorMessage = "Inicia sesion de nuevo.") }
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                eventsRepository.markEventCompleted(user, sessionId)
+            }.onFailure { error ->
+                _uiState.update { it.copy(errorMessage = error.toUserMessage()) }
+            }
+        }
     }
 
-    private fun startTicker(events: List<ContentItem>) {
-        tickerJob?.cancel()
+    private fun manageTicker() {
+        if (!latestState.isActive) {
+            tickerJob?.cancel()
+            tickerJob = null
+            return
+        }
+        if (tickerJob?.isActive == true) return
         tickerJob = viewModelScope.launch {
-            while (_uiState.value.isActive) {
+            while (isActive) {
                 delay(5_000)
-                if (events.isEmpty() || _uiState.value.awaitingCompletion) {
-                    continue
-                }
-
-                if (System.currentTimeMillis() >= nextEventTimestampMs) {
-                    val next = pickNextEvent(events, lastEventId)
-                    if (next != null) {
-                        lastEventId = next.id
-                        showEventNotification(next)
-                        _uiState.update {
-                            it.copy(
-                                currentEvent = next,
-                                history = listOf(next) + it.history.take(4),
-                                isPaused = false,
-                                awaitingCompletion = true
-                            )
-                        }
-                    }
+                val user = authRepository.currentUser ?: continue
+                val triggeredId = runCatching {
+                    eventsRepository.tryTriggerNextEvent(user, sessionId, availableEvents.map { it.id })
+                }.getOrNull()
+                if (triggeredId != null) {
+                    availableEvents.firstOrNull { it.id == triggeredId }?.let { showEventNotification(it) }
                 }
             }
         }
@@ -160,17 +163,7 @@ class EventsViewModel(
         }
     }
 
-    private fun randomIntervalMs(): Long = Random.nextLong(EVENT_INTERVAL_MIN_MS, EVENT_INTERVAL_MAX_MS + 1)
-
     companion object {
-        private const val EVENT_INTERVAL_MIN_MS = 5L * 60L * 1_000L
-        private const val EVENT_INTERVAL_MAX_MS = 20L * 60L * 1_000L
         const val EXTRA_EVENT_ROUTE = "extra_event_route"
-
-        fun pickNextEvent(events: List<ContentItem>, previousId: String?): ContentItem? {
-            if (events.isEmpty()) return null
-            val available = events.filter { it.id != previousId }
-            return if (available.isEmpty()) events.firstOrNull() else available.random()
-        }
     }
 }

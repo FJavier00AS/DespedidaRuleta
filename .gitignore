@@ -15,3 +15,8 @@
 .cxx
 local.properties
 app/google-services.json
+
+# Credenciales de Firebase Admin para scripts/import-content (nunca deben subirse al repo)
+scripts/import-content/*.json
+!scripts/import-content/package.json
+scripts/import-content/node_modules/

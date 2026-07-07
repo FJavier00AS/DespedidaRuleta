@@ -53,6 +53,7 @@ fun SessionHomeScreen(
     uiState: SessionHomeUiState,
     onOpenWheel: () -> Unit,
     onOpenEvents: () -> Unit,
+    onOpenLightning: () -> Unit,
     onOpenAdmin: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenLocalSettings: () -> Unit,
@@ -86,6 +87,7 @@ fun SessionHomeScreen(
                     session = uiState.session,
                     onOpenWheel = onOpenWheel,
                     onOpenEvents = onOpenEvents,
+                    onOpenLightning = onOpenLightning,
                     onOpenAdmin = onOpenAdmin,
                     onOpenHistory = onOpenHistory,
                     onOpenLocalSettings = onOpenLocalSettings,
@@ -101,6 +103,7 @@ private fun SessionHomeContent(
     session: SessionDetail,
     onOpenWheel: () -> Unit,
     onOpenEvents: () -> Unit,
+    onOpenLightning: () -> Unit,
     onOpenAdmin: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenLocalSettings: () -> Unit,
@@ -147,6 +150,10 @@ private fun SessionHomeContent(
             VegasSecondaryButton(
                 text = "Eventos aleatorios",
                 onClick = onOpenEvents
+            )
+            VegasSecondaryButton(
+                text = "Ronda relampago",
+                onClick = onOpenLightning
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 VegasSecondaryButton(
@@ -274,6 +281,7 @@ private fun SessionHomePreview() {
             onOpenSettings = {},
             onOpenWheel = {},
             onOpenEvents = {},
+            onOpenLightning = {},
             onOpenAdmin = {},
             onOpenHistory = {},
             onOpenLocalSettings = {},

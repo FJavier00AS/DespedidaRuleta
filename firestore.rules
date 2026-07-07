@@ -44,7 +44,7 @@ service cloud.firestore {
     }
 
     function rouletteCategory(value) {
-      return value in ['QUESTION', 'CHALLENGE', 'PUNISHMENT', 'EVENT'];
+      return value in ['QUESTION', 'CHALLENGE', 'LIGHTNING', 'PUNISHMENT', 'EVENT'];
     }
 
     function contentKeys() {
@@ -92,10 +92,18 @@ service cloud.firestore {
         'contentRotation',
         'startedAt',
         'completedAt',
-        'updatedAt',
-        'lightningTotal',
-        'lightningAnswered',
-        'lightningCorrect'
+        'updatedAt'
+      ];
+    }
+
+    function eventsStateKeys() {
+      return [
+        'isActive',
+        'currentEventId',
+        'awaitingCompletion',
+        'nextEventAtMillis',
+        'historyIds',
+        'updatedAt'
       ];
     }
 
@@ -319,17 +327,25 @@ service cloud.firestore {
       match /state/{stateId} {
         allow read: if isMember(sessionId);
         allow create, update: if isMember(sessionId)
-          && stateId == 'game'
-          && request.resource.data.keys().hasOnly(gameStateKeys())
-          && request.resource.data.phase in [
-            'IDLE',
-            'CATEGORY_SPINNING',
-            'CATEGORY_SELECTED',
-            'CONTENT_SPINNING',
-            'COMPLETED',
-            'EXHAUSTED',
-            'LIGHTNING_SUMMARY'
-          ];
+          && (
+            (
+              stateId == 'game'
+              && request.resource.data.keys().hasOnly(gameStateKeys())
+              && request.resource.data.phase in [
+                'IDLE',
+                'CATEGORY_SPINNING',
+                'CATEGORY_SELECTED',
+                'CONTENT_SPINNING',
+                'COMPLETED',
+                'EXHAUSTED'
+              ]
+            )
+            ||
+            (
+              stateId == 'events'
+              && request.resource.data.keys().hasOnly(eventsStateKeys())
+            )
+          );
         allow delete: if isOwner(sessionId);
       }
 

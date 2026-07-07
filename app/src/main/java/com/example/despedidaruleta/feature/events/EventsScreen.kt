@@ -1,5 +1,7 @@
 package com.example.despedidaruleta.feature.events
 
+import android.media.AudioManager
+import android.media.ToneGenerator
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,7 +12,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.despedidaruleta.core.designsystem.component.LoadingState
@@ -29,6 +36,18 @@ fun EventsScreen(
     onMarkCompleted: () -> Unit,
     onBack: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+    val toneGenerator = remember { ToneGenerator(AudioManager.STREAM_MUSIC, 90) }
+    DisposableEffect(Unit) {
+        onDispose { toneGenerator.release() }
+    }
+    LaunchedEffect(uiState.currentEvent?.id) {
+        if (uiState.isActive && uiState.awaitingCompletion && uiState.currentEvent != null) {
+            if (uiState.settings.hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            if (uiState.settings.soundEnabled) toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP2, 350)
+        }
+    }
+
     VegasBackground {
         Column(
             modifier = Modifier
@@ -49,10 +68,10 @@ fun EventsScreen(
                     Text(text = "Estado", style = MaterialTheme.typography.titleLarge)
                     Text(
                         text = if (uiState.isActive) {
-                            when {
-                                uiState.isPaused -> "Pausado por la ruleta. Seguirá esperando a que vuelva la partida."
-                                uiState.awaitingCompletion -> "Marca el evento actual como completado para que el siguiente pueda sorprenderos."
-                                else -> "Activo: el próximo evento puede llegar en cualquier momento. Sorpresa."
+                            if (uiState.awaitingCompletion) {
+                                "Marca el evento actual como completado para que el siguiente pueda sorprenderos."
+                            } else {
+                                "Activo: el próximo evento puede llegar en cualquier momento. Sorpresa."
                             }
                         } else {
                             "Inactivo: activa este modo para empezar a lanzar eventos aleatorios."
@@ -81,10 +100,10 @@ fun EventsScreen(
                             Text(text = event.text, style = MaterialTheme.typography.bodyLarge)
                             Text(
                                 text = if (uiState.isActive) {
-                                    when {
-                                        uiState.awaitingCompletion -> "Marca el evento como completado para seguir."
-                                        uiState.isPaused -> "En pausa por la ruleta. El siguiente evento es sorpresa."
-                                        else -> "El siguiente evento es sorpresa: puede llegar en cualquier momento."
+                                    if (uiState.awaitingCompletion) {
+                                        "Marca el evento como completado para seguir."
+                                    } else {
+                                        "El siguiente evento es sorpresa: puede llegar en cualquier momento."
                                     }
                                 } else {
                                     "Activa el modo para empezar a lanzar eventos."

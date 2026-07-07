@@ -15,6 +15,7 @@ object AppRoutes {
     const val SessionAdmin = "session/{sessionId}/admin"
     const val SessionHistory = "session/{sessionId}/history"
     const val SessionEvents = "session/{sessionId}/events"
+    const val SessionLightning = "session/{sessionId}/lightning"
     const val LocalSettings = "session/{sessionId}/local-settings"
     const val SessionIdArg = "sessionId"
 
@@ -24,5 +25,6 @@ object AppRoutes {
     fun sessionAdmin(sessionId: String): String = "session/$sessionId/admin"
     fun sessionHistory(sessionId: String): String = "session/$sessionId/history"
     fun sessionEvents(sessionId: String): String = "session/$sessionId/events"
+    fun sessionLightning(sessionId: String): String = "session/$sessionId/lightning"
     fun localSettings(sessionId: String): String = "session/$sessionId/local-settings"
 }

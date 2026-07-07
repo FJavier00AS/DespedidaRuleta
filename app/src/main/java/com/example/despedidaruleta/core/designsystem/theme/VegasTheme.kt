@@ -22,6 +22,7 @@ object VegasColors {
     val Red = Color(0xFFB9162F)
     val RedDeep = Color(0xFF6F0D1A)
     val NeonCyan = Color(0xFF40E0D0)
+    val NeonPurple = Color(0xFFB05CFF)
     val Question = Color(0xFF1FB8FF)
     val Challenge = Color(0xFFFFA928)
     val Punishment = Color(0xFFFF355D)

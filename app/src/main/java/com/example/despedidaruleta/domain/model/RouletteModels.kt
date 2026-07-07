@@ -1,22 +1,26 @@
 ﻿package com.example.despedidaruleta.domain.model
 
 import kotlin.math.absoluteValue
-import kotlin.math.roundToInt
 
 enum class RouletteCategory(val firestoreValue: String, val label: String) {
     QUESTION("QUESTION", "Preguntas"),
-    CHALLENGE("CHALLENGE", "Sección relámpago"),
+    CHALLENGE("CHALLENGE", "Retos"),
+    LIGHTNING("LIGHTNING", "Ronda relampago"),
     PUNISHMENT("PUNISHMENT", "Castigos"),
     EVENT("EVENT", "Eventos");
 
     companion object {
+        // La ronda relampago y los eventos se juegan fuera de la ruleta principal.
+        val wheelEntries: List<RouletteCategory> = listOf(QUESTION, CHALLENGE, PUNISHMENT)
+
         fun fromFirestore(value: String?): RouletteCategory? = entries.firstOrNull { it.firestoreValue == value }
 
         fun parse(value: String): RouletteCategory? {
             val normalized = value.trim().lowercase()
             return when (normalized) {
                 "question", "questions", "pregunta", "preguntas", "q" -> QUESTION
-                "challenge", "challenges", "reto", "retos", "relampago", "relámpago", "lightning", "r" -> CHALLENGE
+                "challenge", "challenges", "reto", "retos", "r" -> CHALLENGE
+                "lightning", "ronda relampago", "ronda relámpago", "relampago", "relámpago", "rr" -> LIGHTNING
                 "punishment", "punishments", "castigo", "castigos", "c" -> PUNISHMENT
                 "event", "events", "evento", "eventos", "e" -> EVENT
                 else -> null
@@ -31,8 +35,7 @@ enum class GamePhase(val firestoreValue: String, val label: String) {
     CATEGORY_SELECTED("CATEGORY_SELECTED", "Categoria elegida"),
     CONTENT_SPINNING("CONTENT_SPINNING", "Girando"),
     COMPLETED("COMPLETED", "Completada"),
-    EXHAUSTED("EXHAUSTED", "Sin contenido"),
-    LIGHTNING_SUMMARY("LIGHTNING_SUMMARY", "Resumen relámpago");
+    EXHAUSTED("EXHAUSTED", "Sin contenido");
 
     companion object {
         fun fromFirestore(value: String?): GamePhase = entries.firstOrNull { it.firestoreValue == value } ?: IDLE
@@ -87,14 +90,8 @@ data class RouletteGameState(
     val contentRotation: Float = 0f,
     val startedAtMillis: Long? = null,
     val completedAtMillis: Long? = null,
-    val updatedAtMillis: Long? = null,
-    val lightningTotal: Int = 0,
-    val lightningAnswered: Int = 0,
-    val lightningCorrect: Int = 0
-) {
-    val lightningIncorrect: Int = (lightningAnswered - lightningCorrect).coerceAtLeast(0)
-    val lightningPercent: Int = if (lightningAnswered > 0) ((lightningCorrect * 100f) / lightningAnswered).roundToInt() else 0
-}
+    val updatedAtMillis: Long? = null
+)
 
 data class SpinRecord(
     val id: String,
@@ -153,5 +150,3 @@ fun String.normalizedContentHash(): String = trim()
     .hashCode()
     .absoluteValue
     .toString(36)
-
-fun RouletteCategory.contentSourceCategory(): RouletteCategory = if (this == RouletteCategory.CHALLENGE) RouletteCategory.QUESTION else this

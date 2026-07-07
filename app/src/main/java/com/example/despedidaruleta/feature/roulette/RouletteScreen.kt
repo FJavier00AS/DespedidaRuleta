@@ -60,17 +60,14 @@ import com.example.despedidaruleta.domain.model.GamePhase
 import com.example.despedidaruleta.domain.model.RouletteCategory
 import kotlin.math.PI
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
 fun RouletteScreen(
     uiState: RouletteUiState,
     onSpinCategory: () -> Unit,
-    onOpenLightningSection: () -> Unit,
     onSpinContent: () -> Unit,
     onResolveResult: (Boolean) -> Unit,
-    onCloseLightningSummary: () -> Unit,
     onResetGame: () -> Unit,
     onOpenAdmin: () -> Unit,
     onOpenHistory: () -> Unit,
@@ -120,7 +117,6 @@ fun RouletteScreen(
             GameStagePanel(
                 uiState = uiState,
                 onSpinCategory = onSpinCategory,
-                onOpenLightningSection = onOpenLightningSection,
                 onSpinContent = onSpinContent
             )
 
@@ -137,14 +133,12 @@ fun RouletteScreen(
     }
 
     ResultDialog(uiState = uiState, onResolveResult = onResolveResult)
-    LightningSummaryDialog(uiState = uiState, onClose = onCloseLightningSummary)
 }
 
 @Composable
 private fun GameStagePanel(
     uiState: RouletteUiState,
     onSpinCategory: () -> Unit,
-    onOpenLightningSection: () -> Unit,
     onSpinContent: () -> Unit
 ) {
     val phase = uiState.gameState.phase
@@ -152,25 +146,24 @@ private fun GameStagePanel(
         (phase == GamePhase.CATEGORY_SELECTED || phase == GamePhase.CONTENT_SPINNING || phase == GamePhase.COMPLETED)
 
     if (phase == GamePhase.IDLE) {
-        QuestionIntroPanel(uiState = uiState, onSpinCategory = onSpinCategory, onOpenLightningSection = onOpenLightningSection)
+        QuestionIntroPanel(uiState = uiState, onSpinCategory = onSpinCategory)
     } else if (showContentWheel) {
         ContentWheelPanel(uiState = uiState, onSpinContent = onSpinContent)
     } else {
-        QuestionIntroPanel(uiState = uiState, onSpinCategory = onSpinCategory, onOpenLightningSection = onOpenLightningSection)
+        QuestionIntroPanel(uiState = uiState, onSpinCategory = onSpinCategory)
     }
 }
 
 @Composable
 private fun QuestionIntroPanel(
     uiState: RouletteUiState,
-    onSpinCategory: () -> Unit,
-    onOpenLightningSection: () -> Unit
+    onSpinCategory: () -> Unit
 ) {
     VegasCard {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(text = "Ruleta de preguntas", style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
             Text(
-                text = "La partida gira alrededor de preguntas. Si aciertas, recibirás un mensaje de premio; si fallas, se abrirá la ruleta de castigos. También puedes entrar a la sección relámpago para responder varias preguntas rápidas seguidas.",
+                text = "La partida gira alrededor de preguntas. Si aciertas, recibirás un mensaje de premio; si fallas, se abrirá la ruleta de castigos.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = VegasColors.TextSecondary,
                 textAlign = TextAlign.Center
@@ -188,63 +181,8 @@ private fun QuestionIntroPanel(
                 centerText = "Preguntas",
                 effectsEnabled = uiState.settings.visualEffectsEnabled
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                VegasPrimaryButton(
-                    text = if (uiState.gameState.phase == GamePhase.CATEGORY_SPINNING) "Girando pregunta" else "Girar pregunta",
-                    onClick = onSpinCategory,
-                    enabled = uiState.canSpinCategory,
-                    isLoading = uiState.actionLoading,
-                    modifier = Modifier.weight(1f)
-                )
-                VegasSecondaryButton(
-                    text = "Relámpago",
-                    onClick = onOpenLightningSection,
-                    enabled = uiState.canSpinCategory,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryWheelPanel(
-    uiState: RouletteUiState,
-    onSpinCategory: () -> Unit
-) {
-    val totalAvailable = uiState.totalAvailable.coerceAtLeast(0)
-    val segments = RouletteCategory.entries.map { category ->
-        val stats = uiState.stats.firstOrNull { it.category == category }
-        val available = stats?.availableCount ?: 0
-        val percent = if (totalAvailable > 0) ((available * 100f) / totalAvailable).roundToInt() else 0
-        WheelSegment(
-            label = "${category.shortLabel()}\n$percent%",
-            weight = available.coerceAtLeast(0),
-            color = category.segmentColor(),
-            labelColor = category.segmentTextColor()
-        )
-    }
-
-    VegasCard {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(text = "Ruleta principal", style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
-            Text(
-                text = "La probabilidad depende del contenido disponible: más preguntas, sección relámpago o castigos equivalen a más espacio en la ruleta.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = VegasColors.TextSecondary,
-                textAlign = TextAlign.Center
-            )
-            WheelCanvas(
-                segments = segments,
-                rotation = uiState.gameState.categoryRotation,
-                centerText = when (uiState.gameState.phase) {
-                    GamePhase.CATEGORY_SPINNING -> "Girando"
-                    else -> "Principal"
-                },
-                effectsEnabled = uiState.settings.visualEffectsEnabled
-            )
             VegasPrimaryButton(
-                text = if (uiState.gameState.phase == GamePhase.CATEGORY_SPINNING) "Girando categoria" else "Girar categoria",
+                text = if (uiState.gameState.phase == GamePhase.CATEGORY_SPINNING) "Girando pregunta" else "Girar pregunta",
                 onClick = onSpinCategory,
                 enabled = uiState.canSpinCategory,
                 isLoading = uiState.actionLoading
@@ -480,8 +418,6 @@ private fun ResultDialog(uiState: RouletteUiState, onResolveResult: (Boolean) ->
     if (state.phase != GamePhase.COMPLETED || text.isNullOrBlank() || category == null) return
 
     val isQuestion = category == RouletteCategory.QUESTION
-    val isLightning = category == RouletteCategory.CHALLENGE
-    val tracksResult = isQuestion || isLightning
     AlertDialog(
         onDismissRequest = {},
         containerColor = VegasColors.Card,
@@ -504,57 +440,19 @@ private fun ResultDialog(uiState: RouletteUiState, onResolveResult: (Boolean) ->
                         color = VegasColors.TextSecondary,
                         style = MaterialTheme.typography.bodyMedium
                     )
-                } else if (isLightning) {
-                    Text(
-                        text = "Pregunta ${(state.lightningAnswered + 1).coerceAtMost(state.lightningTotal)} de ${state.lightningTotal}. Marca acierto o fallo para seguir con la ronda.",
-                        color = VegasColors.TextSecondary,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = { onResolveResult(true) }, enabled = !uiState.actionLoading) {
-                Text(text = if (isQuestion) "Premio" else if (isLightning) "Acierto" else "Volver", color = VegasColors.Gold)
+                Text(text = if (isQuestion) "Premio" else "Volver", color = VegasColors.Gold)
             }
         },
         dismissButton = {
-            if (tracksResult) {
+            if (isQuestion) {
                 TextButton(onClick = { onResolveResult(false) }, enabled = !uiState.actionLoading) {
                     Text(text = "Fallo", color = VegasColors.Red)
                 }
-            }
-        }
-    )
-}
-
-@Composable
-private fun LightningSummaryDialog(uiState: RouletteUiState, onClose: () -> Unit) {
-    val state = uiState.gameState
-    if (state.phase != GamePhase.LIGHTNING_SUMMARY) return
-
-    AlertDialog(
-        onDismissRequest = {},
-        containerColor = VegasColors.Card,
-        titleContentColor = VegasColors.TextPrimary,
-        textContentColor = VegasColors.TextPrimary,
-        title = {
-            Text(text = "Resumen ronda relámpago", style = MaterialTheme.typography.headlineSmall, color = VegasColors.TextPrimary)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "${state.lightningCorrect} de ${state.lightningAnswered} correctas (${state.lightningPercent}%)",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = VegasColors.Gold
-                )
-                Text(text = "Correctas: ${state.lightningCorrect}", color = VegasColors.TextSecondary)
-                Text(text = "Incorrectas: ${state.lightningIncorrect}", color = VegasColors.TextSecondary)
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onClose, enabled = !uiState.actionLoading) {
-                Text(text = "Cerrar", color = VegasColors.Gold)
             }
         }
     )
@@ -570,6 +468,7 @@ private data class WheelSegment(
 private fun RouletteCategory.segmentColor(): Color = when (this) {
     RouletteCategory.QUESTION -> VegasColors.NeonCyan
     RouletteCategory.CHALLENGE -> VegasColors.Gold
+    RouletteCategory.LIGHTNING -> VegasColors.NeonPurple
     RouletteCategory.PUNISHMENT -> VegasColors.Red
     RouletteCategory.EVENT -> VegasColors.Warning
 }
@@ -582,32 +481,25 @@ private fun RouletteCategory.segmentTextColor(): Color = when (this) {
 
 private fun RouletteCategory.shortLabel(): String = when (this) {
     RouletteCategory.QUESTION -> "Preguntas"
-    RouletteCategory.CHALLENGE -> "Relámpago"
+    RouletteCategory.CHALLENGE -> "Retos"
+    RouletteCategory.LIGHTNING -> "Relampago"
     RouletteCategory.PUNISHMENT -> "Castigos"
     RouletteCategory.EVENT -> "Eventos"
 }
 
 private fun categoryWheelTitle(category: RouletteCategory): String = when (category) {
     RouletteCategory.QUESTION -> "Ruleta de preguntas"
-    RouletteCategory.CHALLENGE -> "Ruleta relámpago"
+    RouletteCategory.CHALLENGE -> "Ruleta de retos"
+    // La ronda relampago no usa ruleta de contenido; rama necesaria por exhaustividad.
+    RouletteCategory.LIGHTNING -> "Ronda relampago"
     RouletteCategory.PUNISHMENT -> "Ruleta de castigos"
     RouletteCategory.EVENT -> "Ruleta de eventos"
 }
 
 private fun contentWheelMessage(uiState: RouletteUiState, category: RouletteCategory, availableCount: Int): String {
-    val state = uiState.gameState
-    val lightningProgress = "Pregunta ${(state.lightningAnswered + 1).coerceAtMost(state.lightningTotal)} de ${state.lightningTotal}."
-    return when (state.phase) {
-        GamePhase.CATEGORY_SELECTED -> if (category == RouletteCategory.CHALLENGE) {
-            "Ronda relámpago activa. $lightningProgress"
-        } else {
-            "Ha salido ${category.label.lowercase()}. Ahora gira esta ruleta. Quedan $availableCount disponibles."
-        }
-        GamePhase.CONTENT_SPINNING -> if (category == RouletteCategory.CHALLENGE) {
-            "La ruleta relámpago está girando. $lightningProgress"
-        } else {
-            "La ruleta de ${category.label.lowercase()} esta girando."
-        }
+    return when (uiState.gameState.phase) {
+        GamePhase.CATEGORY_SELECTED -> "Ha salido ${category.label.lowercase()}. Ahora gira esta ruleta. Quedan $availableCount disponibles."
+        GamePhase.CONTENT_SPINNING -> "La ruleta de ${category.label.lowercase()} esta girando."
         GamePhase.COMPLETED -> "Resultado preparado. Resuelve el modal para continuar."
         else -> "Contenido disponible: $availableCount."
     }
@@ -615,7 +507,8 @@ private fun contentWheelMessage(uiState: RouletteUiState, category: RouletteCate
 
 private fun resultTitle(category: RouletteCategory): String = when (category) {
     RouletteCategory.QUESTION -> "Pregunta"
-    RouletteCategory.CHALLENGE -> "Relámpago"
+    RouletteCategory.CHALLENGE -> "Reto"
+    RouletteCategory.LIGHTNING -> "Ronda relampago"
     RouletteCategory.PUNISHMENT -> "Castigo"
     RouletteCategory.EVENT -> "Evento"
 }
