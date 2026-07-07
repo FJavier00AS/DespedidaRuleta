@@ -8,7 +8,12 @@ import kotlinx.coroutines.flow.Flow
 interface EventsRepository {
     fun observeEventsState(sessionId: String): Flow<RealtimeValue<EventsState>>
 
-    suspend fun setEventsActive(user: AuthUser, sessionId: String, active: Boolean, availableEventIds: List<String>)
+    /**
+     * Returns the id of the event chosen when activating (null when deactivating,
+     * or when activating was a no-op because it was already active). Same
+     * broadcast-only-on-non-null contract as [tryTriggerNextEvent].
+     */
+    suspend fun setEventsActive(user: AuthUser, sessionId: String, active: Boolean, availableEventIds: List<String>): String?
 
     suspend fun markEventCompleted(user: AuthUser, sessionId: String)
 

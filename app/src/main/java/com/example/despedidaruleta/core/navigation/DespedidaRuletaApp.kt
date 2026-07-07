@@ -1,10 +1,14 @@
 ﻿package com.example.despedidaruleta.core.navigation
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -13,12 +17,14 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.despedidaruleta.core.di.AppContainer
 import com.example.despedidaruleta.feature.admin.AdminScreen
 import com.example.despedidaruleta.feature.admin.AdminViewModel
 import com.example.despedidaruleta.feature.auth.LoginScreen
+import com.example.despedidaruleta.feature.events.EventArrivalPopup
 import com.example.despedidaruleta.feature.events.EventsScreen
 import com.example.despedidaruleta.feature.events.EventsViewModel
 import com.example.despedidaruleta.feature.auth.LoginViewModel
@@ -57,10 +63,11 @@ fun DespedidaRuletaApp(
 ) {
     val navController = rememberNavController()
 
-    NavHost(
-        navController = navController,
-        startDestination = AppRoutes.Splash
-    ) {
+    Box {
+        NavHost(
+            navController = navController,
+            startDestination = AppRoutes.Splash
+        ) {
         composable(AppRoutes.Splash) {
             val factory = remember(container) {
                 viewModelFactory {
@@ -496,6 +503,48 @@ fun DespedidaRuletaApp(
                 onQuietEndChanged = viewModel::setQuietEnd,
                 onBack = { navController.popBackStack() }
             )
+        }
+        }
+
+        val currentBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = currentBackStackEntry?.destination?.route
+        val currentSessionId = currentBackStackEntry?.arguments?.getString(AppRoutes.SessionIdArg)
+
+        if (currentSessionId != null) {
+            val activity = LocalContext.current as ComponentActivity
+            val eventsFactory = remember(container, currentSessionId) {
+                viewModelFactory {
+                    initializer {
+                        EventsViewModel(
+                            sessionId = currentSessionId,
+                            authRepository = container.authRepository,
+                            rouletteRepository = container.rouletteRepository,
+                            eventsRepository = container.eventsRepository,
+                            localSettingsRepository = container.localSettingsRepository,
+                            notificationRelayClient = container.notificationRelayClient
+                        )
+                    }
+                }
+            }
+            val eventsViewModel: EventsViewModel = viewModel(
+                viewModelStoreOwner = activity,
+                key = currentSessionId,
+                factory = eventsFactory
+            )
+            val eventsUiState by eventsViewModel.uiState.collectAsStateWithLifecycle()
+            // Kept alive for every session-scoped route (including lightning) so dismissals
+            // aren't forgotten when navigating away and back; only the dialog's visibility
+            // is gated on the current route below.
+            var dismissedEventId by rememberSaveable(currentSessionId) { mutableStateOf<String?>(null) }
+
+            val shouldShowPopup = currentRoute != AppRoutes.SessionLightning &&
+                eventsUiState.currentEvent?.id != dismissedEventId
+            if (shouldShowPopup) {
+                EventArrivalPopup(
+                    uiState = eventsUiState,
+                    onAccept = { dismissedEventId = eventsUiState.currentEvent?.id }
+                )
+            }
         }
     }
 }

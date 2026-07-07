@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -138,4 +140,42 @@ fun EventsScreen(
             }
         }
     }
+}
+
+/**
+ * App-wide popup shown when a new event arrives, regardless of which screen is on top
+ * (the caller is responsible for not composing this while on the lightning round screen).
+ * "Aceptar" only dismisses the popup; the event stays awaiting completion until the
+ * user marks it done from the Eventos screen.
+ */
+@Composable
+fun EventArrivalPopup(uiState: EventsUiState, onAccept: () -> Unit) {
+    val event = uiState.currentEvent
+    if (!uiState.isActive || !uiState.awaitingCompletion || event == null) return
+
+    AlertDialog(
+        onDismissRequest = {},
+        containerColor = VegasColors.Card,
+        titleContentColor = VegasColors.TextPrimary,
+        textContentColor = VegasColors.TextPrimary,
+        title = {
+            Text(text = "Evento sorpresa", style = MaterialTheme.typography.headlineSmall, color = VegasColors.TextPrimary)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(text = "#${event.number}", color = VegasColors.Gold, fontWeight = FontWeight.Bold)
+                Text(text = event.text, style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
+                Text(
+                    text = "Marca el evento como completado desde la pestaña de Eventos cuando lo terminéis.",
+                    color = VegasColors.TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onAccept) {
+                Text(text = "Aceptar", color = VegasColors.Gold)
+            }
+        }
+    )
 }

@@ -40,10 +40,10 @@ class FirebaseEventsRepository(
         sessionId: String,
         active: Boolean,
         availableEventIds: List<String>
-    ) {
+    ): String? {
         val sessionRef = sessionRef(sessionId)
         val stateRef = stateRef(sessionId)
-        firestore.runTransaction { transaction ->
+        return firestore.runTransaction { transaction ->
             val sessionSnapshot = transaction.get(sessionRef)
             assertMember(sessionId, sessionSnapshot, user.uid, transaction)
             val current = transaction.get(stateRef).toEventsState()
@@ -71,7 +71,7 @@ class FirebaseEventsRepository(
                 ),
                 SetOptions.merge()
             )
-            null
+            chosen
         }.await()
     }
 

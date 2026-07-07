@@ -106,6 +106,10 @@ class EventsViewModel(
         viewModelScope.launch {
             runCatching {
                 eventsRepository.setEventsActive(user, sessionId, turningOn, availableEvents.map { it.id })
+            }.onSuccess { chosenId ->
+                if (chosenId != null) {
+                    availableEvents.firstOrNull { it.id == chosenId }?.let { showEventNotification(it) }
+                }
             }.onFailure { error ->
                 _uiState.update { it.copy(errorMessage = error.toUserMessage()) }
             }
