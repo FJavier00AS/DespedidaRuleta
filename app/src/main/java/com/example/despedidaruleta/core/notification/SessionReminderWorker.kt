@@ -13,6 +13,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.despedidaruleta.MainActivity
 import com.example.despedidaruleta.R
+import com.example.despedidaruleta.domain.model.isWithinQuietHours
 import java.util.Calendar
 
 class SessionReminderWorker(
@@ -25,7 +26,8 @@ class SessionReminderWorker(
 
         val quietStart = inputData.getInt(KEY_QUIET_START, 2).coerceIn(0, 23)
         val quietEnd = inputData.getInt(KEY_QUIET_END, 9).coerceIn(0, 23)
-        if (isQuietHour(quietStart, quietEnd)) return Result.success()
+        val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        if (isWithinQuietHours(currentHour, quietStart, quietEnd)) return Result.success()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
@@ -62,17 +64,6 @@ class SessionReminderWorker(
 
         NotificationManagerCompat.from(applicationContext).notify(sessionId.hashCode(), notification)
         return Result.success()
-    }
-
-    private fun isQuietHour(start: Int, end: Int): Boolean {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        return if (start == end) {
-            false
-        } else if (start < end) {
-            hour in start until end
-        } else {
-            hour >= start || hour < end
-        }
     }
 
     companion object {

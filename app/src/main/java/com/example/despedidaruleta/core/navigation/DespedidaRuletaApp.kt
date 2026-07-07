@@ -24,6 +24,7 @@ import com.example.despedidaruleta.core.di.AppContainer
 import com.example.despedidaruleta.feature.admin.AdminScreen
 import com.example.despedidaruleta.feature.admin.AdminViewModel
 import com.example.despedidaruleta.feature.auth.LoginScreen
+import com.example.despedidaruleta.domain.model.isQuietHourNow
 import com.example.despedidaruleta.feature.events.EventArrivalPopup
 import com.example.despedidaruleta.feature.events.EventsScreen
 import com.example.despedidaruleta.feature.events.EventsViewModel
@@ -538,7 +539,8 @@ fun DespedidaRuletaApp(
             var dismissedEventId by rememberSaveable(currentSessionId) { mutableStateOf<String?>(null) }
 
             val shouldShowPopup = currentRoute != AppRoutes.SessionLightning &&
-                eventsUiState.currentEvent?.id != dismissedEventId
+                eventsUiState.currentEvent?.id != dismissedEventId &&
+                !eventsUiState.settings.isQuietHourNow()
             if (shouldShowPopup) {
                 EventArrivalPopup(
                     uiState = eventsUiState,

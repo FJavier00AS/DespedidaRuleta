@@ -8,6 +8,7 @@ import com.example.despedidaruleta.core.notification.NotificationRelayClient
 import com.example.despedidaruleta.domain.model.ContentItem
 import com.example.despedidaruleta.domain.model.EventsState
 import com.example.despedidaruleta.domain.model.LocalUserSettings
+import com.example.despedidaruleta.domain.model.isQuietHourNow
 import com.example.despedidaruleta.domain.model.RouletteCategory
 import com.example.despedidaruleta.domain.repository.AuthRepository
 import com.example.despedidaruleta.domain.repository.EventsRepository
@@ -153,6 +154,7 @@ class EventsViewModel(
     }
 
     private fun showEventNotification(event: ContentItem) {
+        if (_uiState.value.settings.isQuietHourNow()) return
         viewModelScope.launch {
             runCatching {
                 notificationRelayClient.broadcast(

@@ -38,18 +38,6 @@ fun EventsScreen(
     onMarkCompleted: () -> Unit,
     onBack: () -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
-    val toneGenerator = remember { ToneGenerator(AudioManager.STREAM_MUSIC, 90) }
-    DisposableEffect(Unit) {
-        onDispose { toneGenerator.release() }
-    }
-    LaunchedEffect(uiState.currentEvent?.id) {
-        if (uiState.isActive && uiState.awaitingCompletion && uiState.currentEvent != null) {
-            if (uiState.settings.hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            if (uiState.settings.soundEnabled) toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP2, 350)
-        }
-    }
-
     VegasBackground {
         Column(
             modifier = Modifier
@@ -152,6 +140,16 @@ fun EventsScreen(
 fun EventArrivalPopup(uiState: EventsUiState, onAccept: () -> Unit) {
     val event = uiState.currentEvent
     if (!uiState.isActive || !uiState.awaitingCompletion || event == null) return
+
+    val haptic = LocalHapticFeedback.current
+    val toneGenerator = remember { ToneGenerator(AudioManager.STREAM_MUSIC, 90) }
+    DisposableEffect(Unit) {
+        onDispose { toneGenerator.release() }
+    }
+    LaunchedEffect(event.id) {
+        if (uiState.settings.hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        if (uiState.settings.soundEnabled) toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP2, 350)
+    }
 
     AlertDialog(
         onDismissRequest = {},
