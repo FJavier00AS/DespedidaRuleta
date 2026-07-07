@@ -27,6 +27,7 @@ import com.example.despedidaruleta.core.designsystem.theme.VegasColors
 fun EventsScreen(
     uiState: EventsUiState,
     onToggleActive: () -> Unit,
+    onMarkCompleted: () -> Unit,
     onBack: () -> Unit
 ) {
     VegasBackground {
@@ -49,10 +50,10 @@ fun EventsScreen(
                     Text(text = "Estado", style = MaterialTheme.typography.titleLarge)
                     Text(
                         text = if (uiState.isActive) {
-                            if (uiState.isPaused) {
-                                "Pausado por la ruleta. El contador seguirá esperando a que vuelva la partida."
-                            } else {
-                                "Activo: se lanzará un evento cada 30 minutos."
+                            when {
+                                uiState.isPaused -> "Pausado por la ruleta. El contador seguirá esperando a que vuelva la partida."
+                                uiState.awaitingCompletion -> "Marca el evento actual como completado para que empiece la cuenta atrás del siguiente."
+                                else -> "Activo: el próximo evento tardará entre 5 y 20 minutos."
                             }
                         } else {
                             "Inactivo: activa este modo para empezar a lanzar eventos aleatorios."
@@ -81,11 +82,10 @@ fun EventsScreen(
                             Text(text = event.text, style = MaterialTheme.typography.bodyLarge)
                             Text(
                                 text = if (uiState.isActive) {
-                                    val remaining = formatDuration(uiState.nextEventInSeconds)
-                                    if (uiState.isPaused) {
-                                        "Próximo evento en $remaining (pausado por la ruleta)"
-                                    } else {
-                                        "Próximo evento en $remaining"
+                                    when {
+                                        uiState.awaitingCompletion -> "Marca el evento como completado para seguir."
+                                        uiState.isPaused -> "Próximo evento en ${formatDuration(uiState.nextEventInSeconds)} (pausado por la ruleta)"
+                                        else -> "Próximo evento en ${formatDuration(uiState.nextEventInSeconds)}"
                                     }
                                 } else {
                                     "Activa el modo para empezar a lanzar eventos."
@@ -93,6 +93,13 @@ fun EventsScreen(
                                 color = VegasColors.TextSecondary,
                                 style = MaterialTheme.typography.bodyMedium
                             )
+                            if (uiState.isActive && uiState.awaitingCompletion) {
+                                VegasPrimaryButton(
+                                    text = "Completado",
+                                    onClick = onMarkCompleted,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }

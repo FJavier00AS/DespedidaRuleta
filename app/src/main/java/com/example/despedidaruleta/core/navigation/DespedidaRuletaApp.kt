@@ -404,6 +404,7 @@ fun DespedidaRuletaApp(
             EventsScreen(
                 uiState = uiState,
                 onToggleActive = viewModel::toggleActive,
+                onMarkCompleted = viewModel::markCurrentEventCompleted,
                 onBack = { navController.popBackStack() }
             )
         }

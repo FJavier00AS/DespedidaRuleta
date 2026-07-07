@@ -195,6 +195,7 @@ class FirebaseRouletteRepository(
             val questionStats = transaction.get(statsRef(sessionId, RouletteCategory.QUESTION)).toCategoryStats(RouletteCategory.QUESTION)
             if (questionStats.totalCount == 0) throw RouletteContentMissingException()
             if (questionStats.availableContentIds.isEmpty() || questionStats.availableCount <= 0) throw RouletteExhaustedException()
+            val previousRotation = transaction.get(stateRef).getDouble(CATEGORY_ROTATION)?.toFloat() ?: 0f
 
             val selectedCategory = RouletteCategory.QUESTION
             transaction.set(
@@ -206,7 +207,7 @@ class FirebaseRouletteRepository(
                     SELECTED_CONTENT_ID to null,
                     SELECTED_CONTENT_NUMBER to null,
                     SELECTED_CONTENT_TEXT to null,
-                    CATEGORY_ROTATION to targetCategoryRotation(mapOf(selectedCategory to questionStats), selectedCategory),
+                    CATEGORY_ROTATION to targetCategoryRotation(previousRotation, mapOf(selectedCategory to questionStats), selectedCategory),
                     CONTENT_ROTATION to 0f,
                     STARTED_AT to now,
                     COMPLETED_AT to null,
@@ -262,6 +263,8 @@ class FirebaseRouletteRepository(
             val contentSnapshot = transaction.get(contentRef)
             val item = contentSnapshot.toContentItem() ?: throw RouletteContentMissingException()
             if (!item.active || item.used || item.category != sourceCategory) throw RouletteExhaustedException()
+            val previousRotation = transaction.get(sessionRef.collection(STATE).document(GAME))
+                .getDouble(CONTENT_ROTATION)?.toFloat() ?: 0f
 
             val nextAvailableIds = selectedStats.availableContentIds.filterNot { it == selectedContentId }
             val updatedStats = selectedStats.copy(
@@ -306,7 +309,7 @@ class FirebaseRouletteRepository(
                     SELECTED_CONTENT_ID to item.id,
                     SELECTED_CONTENT_NUMBER to item.number,
                     SELECTED_CONTENT_TEXT to item.text,
-                    CONTENT_ROTATION to targetContentRotation(selectedStats.availableContentIds.size),
+                    CONTENT_ROTATION to targetContentRotation(previousRotation, selectedStats.availableContentIds.size),
                     STARTED_AT to now,
                     COMPLETED_AT to null,
                     UPDATED_AT to now
@@ -394,6 +397,7 @@ class FirebaseRouletteRepository(
             val stats = transaction.get(statsRef(sessionId, sourceCategory)).toCategoryStats(sourceCategory)
             if (stats.totalCount == 0) throw RouletteContentMissingException()
             if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
+            val previousRotation = transaction.get(stateRef).getDouble(CATEGORY_ROTATION)?.toFloat() ?: 0f
 
             transaction.set(
                 stateRef,
@@ -404,7 +408,7 @@ class FirebaseRouletteRepository(
                     SELECTED_CONTENT_ID to null,
                     SELECTED_CONTENT_NUMBER to null,
                     SELECTED_CONTENT_TEXT to null,
-                    CATEGORY_ROTATION to targetCategoryRotation(mapOf(category to stats), category),
+                    CATEGORY_ROTATION to targetCategoryRotation(previousRotation, mapOf(category to stats), category),
                     CONTENT_ROTATION to 0f,
                     STARTED_AT to now,
                     COMPLETED_AT to null,
@@ -428,6 +432,7 @@ class FirebaseRouletteRepository(
             if (stats.totalCount == 0) throw RouletteContentMissingException()
             if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
             val total = minOf(roundSize, stats.availableCount)
+            val previousRotation = transaction.get(stateRef).getDouble(CATEGORY_ROTATION)?.toFloat() ?: 0f
 
             transaction.set(
                 stateRef,
@@ -439,6 +444,7 @@ class FirebaseRouletteRepository(
                     SELECTED_CONTENT_NUMBER to null,
                     SELECTED_CONTENT_TEXT to null,
                     CATEGORY_ROTATION to targetCategoryRotation(
+                        previousRotation,
                         mapOf(RouletteCategory.CHALLENGE to stats),
                         RouletteCategory.CHALLENGE
                     ),
@@ -490,6 +496,7 @@ class FirebaseRouletteRepository(
             } else {
                 val stats = transaction.get(statsRef(sessionId, RouletteCategory.QUESTION)).toCategoryStats(RouletteCategory.QUESTION)
                 if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
+                val previousRotation = stateSnapshot.getDouble(CATEGORY_ROTATION)?.toFloat() ?: 0f
                 transaction.set(
                     stateRef,
                     mapOf(
@@ -500,6 +507,7 @@ class FirebaseRouletteRepository(
                         SELECTED_CONTENT_NUMBER to null,
                         SELECTED_CONTENT_TEXT to null,
                         CATEGORY_ROTATION to targetCategoryRotation(
+                            previousRotation,
                             mapOf(RouletteCategory.CHALLENGE to stats),
                             RouletteCategory.CHALLENGE
                         ),
@@ -560,6 +568,7 @@ class FirebaseRouletteRepository(
             val stats = transaction.get(statsRef(sessionId, RouletteCategory.PUNISHMENT)).toCategoryStats(RouletteCategory.PUNISHMENT)
             if (stats.totalCount == 0) throw RouletteContentMissingException()
             if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
+            val previousRotation = transaction.get(stateRef).getDouble(CATEGORY_ROTATION)?.toFloat() ?: 0f
 
             transaction.set(
                 stateRef,
@@ -571,6 +580,7 @@ class FirebaseRouletteRepository(
                     SELECTED_CONTENT_NUMBER to null,
                     SELECTED_CONTENT_TEXT to null,
                     CATEGORY_ROTATION to targetCategoryRotation(
+                        previousRotation,
                         mapOf(RouletteCategory.PUNISHMENT to stats),
                         RouletteCategory.PUNISHMENT
                     ),
@@ -712,19 +722,27 @@ class FirebaseRouletteRepository(
     }
 
     private fun targetCategoryRotation(
+        previousRotation: Float,
         statsByCategory: Map<RouletteCategory, CategoryStats>,
         selectedCategory: RouletteCategory
     ): Float {
         val weights = RouletteCategory.entries.map { category ->
             statsByCategory[category]?.availableCount ?: 0
         }
-        return targetWheelRotation(weights, RouletteCategory.entries.indexOf(selectedCategory))
+        return nextWheelRotation(previousRotation, weights, RouletteCategory.entries.indexOf(selectedCategory))
     }
 
-    private fun targetContentRotation(segmentCount: Int): Float =
-        targetWheelRotation(List(segmentCount.coerceAtLeast(1)) { 1 }, selectedIndex = 0)
+    private fun targetContentRotation(previousRotation: Float, segmentCount: Int): Float =
+        nextWheelRotation(previousRotation, List(segmentCount.coerceAtLeast(1)) { 1 }, selectedIndex = 0)
 
-    private fun targetWheelRotation(weights: List<Int>, selectedIndex: Int): Float {
+    /**
+     * Picks the next rest angle for a wheel and guarantees it lands strictly
+     * ahead of [previousRotation]. Weight/selectedIndex alone can produce the
+     * exact same angle spin after spin (e.g. a wheel with a single populated
+     * category always centers on the same offset), which made
+     * animateFloatAsState skip the animation because the target never changed.
+     */
+    private fun nextWheelRotation(previousRotation: Float, weights: List<Int>, selectedIndex: Int): Float {
         val safeWeights = weights.ifEmpty { listOf(1) }.map { it.coerceAtLeast(0) }
         val effectiveWeights = if (safeWeights.any { it > 0 }) safeWeights else List(safeWeights.size) { 1 }
         val clampedIndex = selectedIndex.coerceIn(0, effectiveWeights.lastIndex)
@@ -732,7 +750,10 @@ class FirebaseRouletteRepository(
         val previousWeight = effectiveWeights.take(clampedIndex).sum()
         val selectedWeight = effectiveWeights[clampedIndex]
         val selectedCenterOffset = (previousWeight + selectedWeight / 2f) * 360f / totalWeight
-        return FULL_SPINS * 360f + normalizeDegrees(-selectedCenterOffset)
+        val extraSpins = FULL_SPINS + Random.nextInt(0, 3)
+        var target = extraSpins * 360f + normalizeDegrees(-selectedCenterOffset)
+        while (target <= previousRotation) target += 360f
+        return target
     }
 
     private fun normalizeDegrees(degrees: Float): Float = ((degrees % 360f) + 360f) % 360f

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 data class EventsUiState(
     val isActive: Boolean = false,
@@ -25,6 +26,7 @@ data class EventsUiState(
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
     val isPaused: Boolean = false,
+    val awaitingCompletion: Boolean = false,
     val nextEventInSeconds: Long = 0L
 )
 
@@ -51,7 +53,7 @@ class EventsViewModel(
                 }
                 .collect { value ->
                     availableEvents = value.data.filter { it.category == RouletteCategory.EVENT && it.active && !it.used }
-                    val currentEvent = if (_uiState.value.isActive) {
+                    val currentEvent = if (_uiState.value.isActive && !_uiState.value.awaitingCompletion) {
                         pickNextEvent(availableEvents, _uiState.value.currentEvent?.id)
                     } else {
                         _uiState.value.currentEvent
@@ -96,18 +98,30 @@ class EventsViewModel(
             availableEvents = events
             val nextEvent = pickNextEvent(events, null)
             lastEventId = nextEvent?.id
-            val now = System.currentTimeMillis()
-            lastEventTimestampMs = now
-            nextEventTimestampMs = now + EVENT_INTERVAL_MS
             _uiState.update {
                 it.copy(
                     currentEvent = nextEvent,
                     history = if (nextEvent != null) listOf(nextEvent) else emptyList(),
                     isPaused = false,
-                    nextEventInSeconds = (EVENT_INTERVAL_MS / 1_000).coerceAtLeast(0)
+                    awaitingCompletion = nextEvent != null,
+                    nextEventInSeconds = 0L
                 )
             }
             startTicker(events)
+        }
+    }
+
+    fun markCurrentEventCompleted() {
+        if (_uiState.value.currentEvent == null || !_uiState.value.awaitingCompletion) return
+        val now = System.currentTimeMillis()
+        val intervalMs = randomIntervalMs()
+        lastEventTimestampMs = now
+        nextEventTimestampMs = now + intervalMs
+        _uiState.update {
+            it.copy(
+                awaitingCompletion = false,
+                nextEventInSeconds = (intervalMs / 1_000).coerceAtLeast(0)
+            )
         }
     }
 
@@ -116,8 +130,7 @@ class EventsViewModel(
         tickerJob = viewModelScope.launch {
             while (_uiState.value.isActive) {
                 delay(1_000)
-                if (events.isEmpty()) {
-                    refreshCountdown()
+                if (events.isEmpty() || _uiState.value.awaitingCompletion) {
                     continue
                 }
 
@@ -127,15 +140,14 @@ class EventsViewModel(
                     val next = pickNextEvent(events, lastEventId)
                     if (next != null) {
                         lastEventId = next.id
-                        lastEventTimestampMs = now
-                        nextEventTimestampMs = now + EVENT_INTERVAL_MS
                         showEventNotification(next)
                         _uiState.update {
                             it.copy(
                                 currentEvent = next,
                                 history = listOf(next) + it.history.take(4),
                                 isPaused = false,
-                                nextEventInSeconds = (EVENT_INTERVAL_MS / 1_000).coerceAtLeast(0)
+                                awaitingCompletion = true,
+                                nextEventInSeconds = 0L
                             )
                         }
                     }
@@ -171,8 +183,11 @@ class EventsViewModel(
         }
     }
 
+    private fun randomIntervalMs(): Long = Random.nextLong(EVENT_INTERVAL_MIN_MS, EVENT_INTERVAL_MAX_MS + 1)
+
     companion object {
-        private const val EVENT_INTERVAL_MS = 30L * 60L * 1_000L
+        private const val EVENT_INTERVAL_MIN_MS = 5L * 60L * 1_000L
+        private const val EVENT_INTERVAL_MAX_MS = 20L * 60L * 1_000L
         const val EXTRA_EVENT_ROUTE = "extra_event_route"
 
         fun pickNextEvent(events: List<ContentItem>, previousId: String?): ContentItem? {

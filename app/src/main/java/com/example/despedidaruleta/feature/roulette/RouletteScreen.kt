@@ -179,7 +179,6 @@ private fun QuestionIntroPanel(
                 segments = listOf(
                     WheelSegment(
                         label = "Preguntas",
-                        legend = "Solo preguntas",
                         weight = 1,
                         color = VegasColors.NeonCyan,
                         labelColor = VegasColors.TextPrimary
@@ -220,7 +219,6 @@ private fun CategoryWheelPanel(
         val percent = if (totalAvailable > 0) ((available * 100f) / totalAvailable).roundToInt() else 0
         WheelSegment(
             label = "${category.shortLabel()}\n$percent%",
-            legend = "${category.label}: $available (${percent}%)",
             weight = available.coerceAtLeast(0),
             color = category.segmentColor(),
             labelColor = category.segmentTextColor()
@@ -272,7 +270,6 @@ private fun ContentWheelPanel(
     val segments = wheelContent.mapIndexed { index, item ->
         WheelSegment(
             label = "#${item.number}",
-            legend = "#${item.number}: ${item.text.take(42)}",
             weight = 1,
             color = if (index % 2 == 0) category.segmentColor() else category.segmentColor().copy(alpha = 0.72f),
             labelColor = category.segmentTextColor()
@@ -358,7 +355,7 @@ private fun WheelCanvas(
     effectsEnabled: Boolean
 ) {
     val visibleSegments = segments.filter { it.weight > 0 }.ifEmpty {
-        listOf(WheelSegment("Sin\ndatos", "Sin datos", 1, VegasColors.TextSecondary, VegasColors.TextPrimary))
+        listOf(WheelSegment("Sin\ndatos", 1, VegasColors.TextSecondary, VegasColors.TextPrimary))
     }
     val totalWeight = visibleSegments.sumOf { it.weight }.coerceAtLeast(1)
     val textSize = with(LocalDensity.current) { 14.sp.toPx() }
@@ -424,11 +421,6 @@ private fun WheelCanvas(
             modifier = Modifier.align(Alignment.TopCenter),
             style = MaterialTheme.typography.headlineMedium
         )
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 10.dp)) {
-        visibleSegments.take(8).forEach { segment ->
-            Text(text = segment.legend, style = MaterialTheme.typography.labelMedium, color = VegasColors.TextSecondary)
-        }
     }
 }
 
@@ -570,7 +562,6 @@ private fun LightningSummaryDialog(uiState: RouletteUiState, onClose: () -> Unit
 
 private data class WheelSegment(
     val label: String,
-    val legend: String,
     val weight: Int,
     val color: Color,
     val labelColor: Color
