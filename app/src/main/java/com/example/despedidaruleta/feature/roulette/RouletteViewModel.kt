@@ -192,7 +192,7 @@ class RouletteViewModel(
                 } else {
                     rouletteRepository.returnToCategoryWheel(user, sessionId)
                     val message = if (selectedCategory == RouletteCategory.QUESTION && success) {
-                        "¡Premio! Respuesta correcta. La ruleta vuelve a empezar."
+                        PRIZE_MESSAGES.random()
                     } else {
                         "Volviendo a la ruleta principal."
                     }
@@ -223,5 +223,15 @@ class RouletteViewModel(
 
     private fun showError(error: Throwable) {
         _uiState.update { it.copy(isLoading = false, errorMessage = error.toUserMessage()) }
+    }
+
+    private companion object {
+        val PRIZE_MESSAGES = listOf(
+            "¡Premio! Respuesta correcta. Cobra tu billete falso del banco.",
+            "¡Acertaste! El banco te debe un billete de mentira.",
+            "¡Premio! Que alguien te pague en dinero falso, te lo has ganado.",
+            "¡Correcto! Reclama tu recompensa (de mentira) ya mismo.",
+            "¡Premio! Un billete falso más para tu colección."
+        )
     }
 }
