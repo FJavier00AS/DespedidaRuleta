@@ -17,6 +17,7 @@ import com.example.despedidaruleta.domain.model.SpinAlreadyRestoredException
 import com.example.despedidaruleta.domain.model.SpinNotFoundException
 import com.example.despedidaruleta.domain.model.SpinRecord
 import com.example.despedidaruleta.domain.model.SpinStatus
+import com.example.despedidaruleta.domain.model.contentSourceCategory
 import com.example.despedidaruleta.domain.model.normalizedContentHash
 import com.example.despedidaruleta.domain.repository.RouletteRepository
 import com.google.firebase.Timestamp
@@ -191,14 +192,11 @@ class FirebaseRouletteRepository(
             val sessionSnapshot = transaction.get(sessionRef)
             assertMember(sessionId, sessionSnapshot, user.uid, transaction)
 
-            val statsByCategory = RouletteCategory.entries.associateWith { category ->
-                transaction.get(statsRef(sessionId, category)).toCategoryStats(category)
-            }
-            if (statsByCategory.values.all { it.totalCount == 0 }) throw RouletteContentMissingException()
-            val availableStats = statsByCategory.values.filter { it.availableContentIds.isNotEmpty() && it.availableCount > 0 }
-            if (availableStats.isEmpty()) throw RouletteExhaustedException()
+            val questionStats = transaction.get(statsRef(sessionId, RouletteCategory.QUESTION)).toCategoryStats(RouletteCategory.QUESTION)
+            if (questionStats.totalCount == 0) throw RouletteContentMissingException()
+            if (questionStats.availableContentIds.isEmpty() || questionStats.availableCount <= 0) throw RouletteExhaustedException()
 
-            val selectedCategory = chooseWeighted(availableStats).category
+            val selectedCategory = RouletteCategory.QUESTION
             transaction.set(
                 stateRef,
                 mapOf(
@@ -208,7 +206,7 @@ class FirebaseRouletteRepository(
                     SELECTED_CONTENT_ID to null,
                     SELECTED_CONTENT_NUMBER to null,
                     SELECTED_CONTENT_TEXT to null,
-                    CATEGORY_ROTATION to targetCategoryRotation(statsByCategory, selectedCategory),
+                    CATEGORY_ROTATION to targetCategoryRotation(mapOf(selectedCategory to questionStats), selectedCategory),
                     CONTENT_ROTATION to 0f,
                     STARTED_AT to now,
                     COMPLETED_AT to null,
@@ -255,14 +253,15 @@ class FirebaseRouletteRepository(
             val sessionSnapshot = transaction.get(sessionRef)
             assertMember(sessionId, sessionSnapshot, user.uid, transaction)
 
-            val selectedStats = transaction.get(statsRef(sessionId, category)).toCategoryStats(category)
+            val sourceCategory = category.contentSourceCategory()
+            val selectedStats = transaction.get(statsRef(sessionId, sourceCategory)).toCategoryStats(sourceCategory)
             if (selectedStats.totalCount == 0) throw RouletteContentMissingException()
             if (selectedStats.availableContentIds.isEmpty() || selectedStats.availableCount <= 0) throw RouletteExhaustedException()
             val selectedContentId = selectedStats.availableContentIds.random()
             val contentRef = sessionRef.collection(CONTENT).document(selectedContentId)
             val contentSnapshot = transaction.get(contentRef)
             val item = contentSnapshot.toContentItem() ?: throw RouletteContentMissingException()
-            if (!item.active || item.used || item.category != category) throw RouletteExhaustedException()
+            if (!item.active || item.used || item.category != sourceCategory) throw RouletteExhaustedException()
 
             val nextAvailableIds = selectedStats.availableContentIds.filterNot { it == selectedContentId }
             val updatedStats = selectedStats.copy(
@@ -272,7 +271,7 @@ class FirebaseRouletteRepository(
             )
             val record = SpinRecord(
                 id = spinRef.id,
-                category = item.category,
+                category = category,
                 contentId = item.id,
                 contentNumber = item.number,
                 contentText = item.text,
@@ -296,7 +295,7 @@ class FirebaseRouletteRepository(
                     UPDATED_AT to now
                 )
             )
-            transaction.set(statsRef(sessionId, item.category), updatedStats.toMutableStats().toFirestore(item.category), SetOptions.merge())
+            transaction.set(statsRef(sessionId, sourceCategory), updatedStats.toMutableStats().toFirestore(sourceCategory), SetOptions.merge())
             transaction.set(spinRef, record.toFirestore(now))
             transaction.set(
                 sessionRef.collection(STATE).document(GAME),
@@ -380,6 +379,40 @@ class FirebaseRouletteRepository(
                 SetOptions.merge()
             )
             transaction.set(auditRef(sessionId), auditMap(user, "RETURN_TO_CATEGORY_WHEEL", ""))
+            null
+        }.await()
+    }
+
+    override suspend fun openCategoryWheel(user: AuthUser, sessionId: String, category: RouletteCategory) {
+        val sessionRef = sessionRef(sessionId)
+        val stateRef = sessionRef.collection(STATE).document(GAME)
+        val now = Date()
+        firestore.runTransaction { transaction ->
+            val sessionSnapshot = transaction.get(sessionRef)
+            assertMember(sessionId, sessionSnapshot, user.uid, transaction)
+            val sourceCategory = category.contentSourceCategory()
+            val stats = transaction.get(statsRef(sessionId, sourceCategory)).toCategoryStats(sourceCategory)
+            if (stats.totalCount == 0) throw RouletteContentMissingException()
+            if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
+
+            transaction.set(
+                stateRef,
+                mapOf(
+                    PHASE to GamePhase.CATEGORY_SELECTED.firestoreValue,
+                    ACTIVE_SPIN_ID to null,
+                    SELECTED_CATEGORY to category.firestoreValue,
+                    SELECTED_CONTENT_ID to null,
+                    SELECTED_CONTENT_NUMBER to null,
+                    SELECTED_CONTENT_TEXT to null,
+                    CATEGORY_ROTATION to targetCategoryRotation(mapOf(category to stats), category),
+                    CONTENT_ROTATION to 0f,
+                    STARTED_AT to now,
+                    COMPLETED_AT to null,
+                    UPDATED_AT to now
+                ),
+                SetOptions.merge()
+            )
+            transaction.set(auditRef(sessionId), auditMap(user, "OPEN_CATEGORY_WHEEL", "category=${category.firestoreValue}"))
             null
         }.await()
     }

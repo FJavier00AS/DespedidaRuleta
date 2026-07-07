@@ -22,6 +22,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 class AppContainer(context: Context) {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    val appContext: Context = context.applicationContext
 
     val authRepository: AuthRepository = FirebaseAuthRepository(auth, firestore)
     val sessionRepository: SessionRepository = FirebaseSessionRepository(firestore, JoinCodeGenerator())

@@ -4,8 +4,9 @@ import kotlin.math.absoluteValue
 
 enum class RouletteCategory(val firestoreValue: String, val label: String) {
     QUESTION("QUESTION", "Preguntas"),
-    CHALLENGE("CHALLENGE", "Retos"),
-    PUNISHMENT("PUNISHMENT", "Castigos");
+    CHALLENGE("CHALLENGE", "Sección relámpago"),
+    PUNISHMENT("PUNISHMENT", "Castigos"),
+    EVENT("EVENT", "Eventos");
 
     companion object {
         fun fromFirestore(value: String?): RouletteCategory? = entries.firstOrNull { it.firestoreValue == value }
@@ -14,8 +15,9 @@ enum class RouletteCategory(val firestoreValue: String, val label: String) {
             val normalized = value.trim().lowercase()
             return when (normalized) {
                 "question", "questions", "pregunta", "preguntas", "q" -> QUESTION
-                "challenge", "challenges", "reto", "retos", "r" -> CHALLENGE
+                "challenge", "challenges", "reto", "retos", "relampago", "relámpago", "lightning", "r" -> CHALLENGE
                 "punishment", "punishments", "castigo", "castigos", "c" -> PUNISHMENT
+                "event", "events", "evento", "eventos", "e" -> EVENT
                 else -> null
             }
         }
@@ -143,3 +145,5 @@ fun String.normalizedContentHash(): String = trim()
     .hashCode()
     .absoluteValue
     .toString(36)
+
+fun RouletteCategory.contentSourceCategory(): RouletteCategory = if (this == RouletteCategory.CHALLENGE) RouletteCategory.QUESTION else this

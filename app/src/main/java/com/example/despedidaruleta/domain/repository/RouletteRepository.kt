@@ -23,6 +23,7 @@ interface RouletteRepository {
     suspend fun startContentSpin(user: AuthUser, sessionId: String, category: RouletteCategory): SpinRecord
     suspend fun markSpinCompleted(user: AuthUser, sessionId: String, spinId: String)
     suspend fun returnToCategoryWheel(user: AuthUser, sessionId: String)
+    suspend fun openCategoryWheel(user: AuthUser, sessionId: String, category: RouletteCategory)
     suspend fun openPunishmentWheel(user: AuthUser, sessionId: String)
     suspend fun restoreSpin(user: AuthUser, sessionId: String, spinId: String)
     suspend fun resetGame(user: AuthUser, sessionId: String)

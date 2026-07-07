@@ -1,9 +1,11 @@
 ﻿package com.example.despedidaruleta.core.navigation
 
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -17,6 +19,8 @@ import com.example.despedidaruleta.core.di.AppContainer
 import com.example.despedidaruleta.feature.admin.AdminScreen
 import com.example.despedidaruleta.feature.admin.AdminViewModel
 import com.example.despedidaruleta.feature.auth.LoginScreen
+import com.example.despedidaruleta.feature.events.EventsScreen
+import com.example.despedidaruleta.feature.events.EventsViewModel
 import com.example.despedidaruleta.feature.auth.LoginViewModel
 import com.example.despedidaruleta.feature.auth.RegisterScreen
 import com.example.despedidaruleta.feature.auth.RegisterViewModel
@@ -44,7 +48,11 @@ import com.example.despedidaruleta.feature.splash.SplashUiState
 import com.example.despedidaruleta.feature.splash.SplashViewModel
 
 @Composable
-fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null) {
+fun DespedidaRuletaApp(
+    container: AppContainer,
+    initialSessionId: String? = null,
+    initialRoute: String? = null
+) {
     val navController = rememberNavController()
 
     NavHost(
@@ -63,10 +71,13 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
             LaunchedEffect(uiState) {
                 when (uiState) {
                     SplashUiState.Authenticated -> {
-                        val destination = initialSessionId
-                            ?.takeIf { it.isNotBlank() }
-                            ?.let { AppRoutes.sessionHome(it) }
-                            ?: AppRoutes.Sessions
+                        val destination = when {
+                            initialRoute.isNullOrBlank() -> initialSessionId
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { AppRoutes.sessionHome(it) }
+                                ?: AppRoutes.Sessions
+                            else -> initialRoute
+                        }
                         navController.navigate(destination) {
                             popUpTo(AppRoutes.Splash) { inclusive = true }
                         }
@@ -249,6 +260,7 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
             SessionHomeScreen(
                 uiState = uiState,
                 onOpenWheel = { navController.navigate(AppRoutes.sessionWheel(sessionId)) },
+                onOpenEvents = { navController.navigate(AppRoutes.sessionEvents(sessionId)) },
                 onOpenAdmin = { navController.navigate(AppRoutes.sessionAdmin(sessionId)) },
                 onOpenHistory = { navController.navigate(AppRoutes.sessionHistory(sessionId)) },
                 onOpenLocalSettings = { navController.navigate(AppRoutes.localSettings(sessionId)) },
@@ -317,6 +329,7 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
             RouletteScreen(
                 uiState = uiState,
                 onSpinCategory = viewModel::spinCategory,
+                onOpenLightningSection = viewModel::openLightningSection,
                 onSpinContent = viewModel::spinContent,
                 onResolveResult = viewModel::resolveResult,
                 onResetGame = viewModel::resetGame,
@@ -353,6 +366,37 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                 onConfirmImport = viewModel::confirmImport,
                 onLoadDemoContent = viewModel::loadDemoContent,
                 onClearPreview = viewModel::clearPreview,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = AppRoutes.SessionEvents,
+            arguments = listOf(navArgument(AppRoutes.SessionIdArg) { type = NavType.StringType })
+        ) { backStackEntry ->
+            val sessionId = requireNotNull(backStackEntry.arguments?.getString(AppRoutes.SessionIdArg))
+            val factory = remember(container, sessionId) {
+                viewModelFactory {
+                    initializer {
+                        EventsViewModel(
+                            sessionId = sessionId,
+                            authRepository = container.authRepository,
+                            rouletteRepository = container.rouletteRepository,
+                            appContext = container.appContext
+                        )
+                    }
+                }
+            }
+            val activity = LocalContext.current as ComponentActivity
+            val viewModel: EventsViewModel = viewModel(
+                viewModelStoreOwner = activity,
+                key = sessionId,
+                factory = factory
+            )
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            EventsScreen(
+                uiState = uiState,
+                onToggleActive = viewModel::toggleActive,
                 onBack = { navController.popBackStack() }
             )
         }

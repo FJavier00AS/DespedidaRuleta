@@ -121,10 +121,27 @@ class RouletteViewModel(
             _uiState.update { it.copy(actionLoading = true, errorMessage = null, infoMessage = null) }
             try {
                 val category = rouletteRepository.startCategorySpin(user, sessionId)
-                _uiState.update { it.copy(infoMessage = "Categoria elegida: ${category.label}") }
+                _uiState.update { it.copy(infoMessage = "Ruleta de ${category.label.lowercase()} lista.") }
                 delay(2_500)
                 rouletteRepository.markCategorySpinCompleted(user, sessionId)
                 _uiState.update { it.copy(actionLoading = false) }
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
+            }
+        }
+    }
+
+    fun openLightningSection() {
+        val user = authRepository.currentUser
+        if (user == null) {
+            _uiState.update { it.copy(errorMessage = "Inicia sesion de nuevo.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(actionLoading = true, errorMessage = null, infoMessage = null) }
+            try {
+                rouletteRepository.openCategoryWheel(user, sessionId, RouletteCategory.CHALLENGE)
+                _uiState.update { it.copy(actionLoading = false, infoMessage = "Sección relámpago lista. Responde rápido.") }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
             }
@@ -169,9 +186,17 @@ class RouletteViewModel(
                 if (!success && selectedCategory == RouletteCategory.QUESTION) {
                     rouletteRepository.openPunishmentWheel(user, sessionId)
                     _uiState.update { it.copy(actionLoading = false, infoMessage = "Fallo registrado. Gira la ruleta de castigos.") }
+                } else if (selectedCategory == RouletteCategory.CHALLENGE) {
+                    rouletteRepository.openCategoryWheel(user, sessionId, RouletteCategory.CHALLENGE)
+                    _uiState.update { it.copy(actionLoading = false, infoMessage = "Otra pregunta relámpago. ¡Sigue!" ) }
                 } else {
                     rouletteRepository.returnToCategoryWheel(user, sessionId)
-                    _uiState.update { it.copy(actionLoading = false, infoMessage = "Volviendo a la ruleta principal.") }
+                    val message = if (selectedCategory == RouletteCategory.QUESTION && success) {
+                        "¡Premio! Respuesta correcta. La ruleta vuelve a empezar."
+                    } else {
+                        "Volviendo a la ruleta principal."
+                    }
+                    _uiState.update { it.copy(actionLoading = false, infoMessage = message) }
                 }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
