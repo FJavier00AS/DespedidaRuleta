@@ -27,6 +27,31 @@ enum class RouletteCategory(val firestoreValue: String, val label: String) {
     }
 }
 
+enum class Difficulty(
+    val firestoreValue: String,
+    val questionLabel: String,
+    val punishmentLabel: String,
+    val questionPoints: Int
+) {
+    EASY("EASY", "Facil", "Suave", 2),
+    MEDIUM("MEDIUM", "Media", "Medio", 5),
+    HARD("HARD", "Dificil", "Bestia", 10);
+
+    fun labelFor(category: RouletteCategory): String =
+        if (category == RouletteCategory.PUNISHMENT) punishmentLabel else questionLabel
+
+    companion object {
+        fun fromFirestore(value: String?): Difficulty? = entries.firstOrNull { it.firestoreValue == value }
+
+        fun parse(value: String): Difficulty? = when (value.trim().lowercase()) {
+            "facil", "fácil", "suave", "easy", "1" -> EASY
+            "media", "medio", "medium", "2" -> MEDIUM
+            "dificil", "difícil", "bestia", "hard", "3" -> HARD
+            else -> null
+        }
+    }
+}
+
 enum class GamePhase(val firestoreValue: String, val label: String) {
     IDLE("IDLE", "Lista"),
     CATEGORY_SPINNING("CATEGORY_SPINNING", "Girando categoria"),
@@ -63,7 +88,8 @@ data class ContentItem(
     val usedByName: String?,
     val usedSpinId: String?,
     val createdAtMillis: Long?,
-    val updatedAtMillis: Long?
+    val updatedAtMillis: Long?,
+    val difficulty: Difficulty? = null
 )
 
 data class CategoryStats(
@@ -72,7 +98,8 @@ data class CategoryStats(
     val availableCount: Int,
     val usedCount: Int,
     val availableContentIds: List<String>,
-    val contentHashes: List<String>
+    val contentHashes: List<String>,
+    val difficulties: Map<String, Difficulty> = emptyMap()
 ) {
     val isExhausted: Boolean = totalCount > 0 && availableCount == 0
 }
@@ -88,7 +115,8 @@ data class RouletteGameState(
     val contentRotation: Float = 0f,
     val startedAtMillis: Long? = null,
     val completedAtMillis: Long? = null,
-    val updatedAtMillis: Long? = null
+    val updatedAtMillis: Long? = null,
+    val pendingPunishmentDifficulty: Difficulty? = null
 )
 
 data class SpinRecord(
@@ -111,7 +139,8 @@ data class ImportRow(
     val category: RouletteCategory?,
     val number: Int?,
     val text: String,
-    val error: String? = null
+    val error: String? = null,
+    val difficulty: Difficulty? = null
 ) {
     val isValid: Boolean = category != null && number != null && text.isNotBlank() && error == null
     val stableHash: String = listOf(category?.firestoreValue.orEmpty(), number ?: -1, text.normalizedContentHash()).joinToString("|")

@@ -1,4 +1,4 @@
-﻿rules_version = '2';
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -52,6 +52,7 @@ service cloud.firestore {
         'category',
         'number',
         'text',
+        'difficulty',
         'searchHash',
         'importHash',
         'active',
@@ -75,6 +76,7 @@ service cloud.firestore {
         'usedCount',
         'availableContentIds',
         'contentHashes',
+        'difficulties',
         'exhausted',
         'updatedAt'
       ];
@@ -88,6 +90,7 @@ service cloud.firestore {
         'selectedContentId',
         'selectedContentNumber',
         'selectedContentText',
+        'pendingPunishmentDifficulty',
         'categoryRotation',
         'contentRotation',
         'startedAt',

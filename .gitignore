@@ -20,3 +20,5 @@ app/google-services.json
 scripts/import-content/*.json
 !scripts/import-content/package.json
 scripts/import-content/node_modules/
+Despedida_Import_App.csv
+Despedida_Quiz_Novio.xlsx

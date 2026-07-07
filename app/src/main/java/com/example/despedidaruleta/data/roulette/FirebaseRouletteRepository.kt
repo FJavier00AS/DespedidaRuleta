@@ -4,6 +4,7 @@ import com.example.despedidaruleta.core.firebase.await
 import com.example.despedidaruleta.domain.model.AuthUser
 import com.example.despedidaruleta.domain.model.CategoryStats
 import com.example.despedidaruleta.domain.model.ContentItem
+import com.example.despedidaruleta.domain.model.Difficulty
 import com.example.despedidaruleta.domain.model.GamePhase
 import com.example.despedidaruleta.domain.model.ImportPreviewEmptyException
 import com.example.despedidaruleta.domain.model.ImportResult
@@ -131,24 +132,24 @@ class FirebaseRouletteRepository(
                     return@forEach
                 }
                 val now = Date()
-                transaction.set(
-                    contentRef,
-                    mapOf(
-                        CATEGORY to category.firestoreValue,
-                        NUMBER to row.number,
-                        TEXT to row.text.trim(),
-                        SEARCH_HASH to row.text.normalizedContentHash(),
-                        IMPORT_HASH to hash,
-                        ACTIVE to true,
-                        USED to false,
-                        IMPORT_ID to importRef.id,
-                        CREATED_BY to user.uid,
-                        CREATED_AT to now,
-                        UPDATED_AT to now
-                    )
+                val contentData = mutableMapOf<String, Any?>(
+                    CATEGORY to category.firestoreValue,
+                    NUMBER to row.number,
+                    TEXT to row.text.trim(),
+                    SEARCH_HASH to row.text.normalizedContentHash(),
+                    IMPORT_HASH to hash,
+                    ACTIVE to true,
+                    USED to false,
+                    IMPORT_ID to importRef.id,
+                    CREATED_BY to user.uid,
+                    CREATED_AT to now,
+                    UPDATED_AT to now
                 )
+                row.difficulty?.let { contentData[DIFFICULTY] = it.firestoreValue }
+                transaction.set(contentRef, contentData)
                 stats.availableContentIds += contentRef.id
                 stats.contentHashes += hash
+                row.difficulty?.let { stats.difficulties[contentRef.id] = it }
                 stats.totalCount += 1
                 stats.availableCount += 1
                 inserted++
@@ -258,7 +259,14 @@ class FirebaseRouletteRepository(
             val selectedStats = transaction.get(statsRef(sessionId, category)).toCategoryStats(category)
             if (selectedStats.totalCount == 0) throw RouletteContentMissingException()
             if (selectedStats.availableContentIds.isEmpty() || selectedStats.availableCount <= 0) throw RouletteExhaustedException()
-            val selectedContentId = selectedStats.availableContentIds.random()
+            val pendingDifficulty = if (category == RouletteCategory.PUNISHMENT) {
+                Difficulty.fromFirestore(
+                    transaction.get(sessionRef.collection(STATE).document(GAME)).getString(PENDING_PUNISHMENT_DIFFICULTY)
+                )
+            } else {
+                null
+            }
+            val selectedContentId = pickWeightedContentId(selectedStats, pendingDifficulty)
             val contentRef = sessionRef.collection(CONTENT).document(selectedContentId)
             val contentSnapshot = transaction.get(contentRef)
             val item = contentSnapshot.toContentItem() ?: throw RouletteContentMissingException()
@@ -298,20 +306,23 @@ class FirebaseRouletteRepository(
             )
             transaction.set(statsRef(sessionId, item.category), updatedStats.toMutableStats().toFirestore(item.category), SetOptions.merge())
             transaction.set(spinRef, record.toFirestore(now))
+            val stateUpdate = mutableMapOf<String, Any?>(
+                PHASE to GamePhase.CONTENT_SPINNING.firestoreValue,
+                ACTIVE_SPIN_ID to spinRef.id,
+                SELECTED_CATEGORY to category.firestoreValue,
+                SELECTED_CONTENT_ID to item.id,
+                SELECTED_CONTENT_NUMBER to item.number,
+                SELECTED_CONTENT_TEXT to item.text,
+                CONTENT_ROTATION to targetContentRotation(selectedStats.availableContentIds.size),
+                STARTED_AT to now,
+                COMPLETED_AT to null,
+                UPDATED_AT to now
+            )
+            // El nivel cargado se consume en cuanto sale un castigo.
+            if (category == RouletteCategory.PUNISHMENT) stateUpdate[PENDING_PUNISHMENT_DIFFICULTY] = null
             transaction.set(
                 sessionRef.collection(STATE).document(GAME),
-                mapOf(
-                    PHASE to GamePhase.CONTENT_SPINNING.firestoreValue,
-                    ACTIVE_SPIN_ID to spinRef.id,
-                    SELECTED_CATEGORY to category.firestoreValue,
-                    SELECTED_CONTENT_ID to item.id,
-                    SELECTED_CONTENT_NUMBER to item.number,
-                    SELECTED_CONTENT_TEXT to item.text,
-                    CONTENT_ROTATION to targetContentRotation(selectedStats.availableContentIds.size),
-                    STARTED_AT to now,
-                    COMPLETED_AT to null,
-                    UPDATED_AT to now
-                ),
+                stateUpdate,
                 SetOptions.merge()
             )
             transaction.set(auditRef(sessionId), auditMap(user, "START_SPIN", "spin=${spinRef.id}"))
@@ -462,6 +473,14 @@ class FirebaseRouletteRepository(
             if (stats.totalCount == 0) throw RouletteContentMissingException()
             if (stats.availableContentIds.isEmpty() || stats.availableCount <= 0) throw RouletteExhaustedException()
 
+            // Nivel de la pregunta fallada: carga los dados del proximo castigo.
+            val failedQuestionId = transaction.get(stateRef).getString(SELECTED_CONTENT_ID)
+            val failedDifficulty = failedQuestionId?.let { id ->
+                Difficulty.fromFirestore(
+                    transaction.get(sessionRef.collection(CONTENT).document(id)).getString(DIFFICULTY)
+                )
+            }
+
             transaction.set(
                 stateRef,
                 mapOf(
@@ -471,6 +490,7 @@ class FirebaseRouletteRepository(
                     SELECTED_CONTENT_ID to null,
                     SELECTED_CONTENT_NUMBER to null,
                     SELECTED_CONTENT_TEXT to null,
+                    PENDING_PUNISHMENT_DIFFICULTY to failedDifficulty?.firestoreValue,
                     CATEGORY_ROTATION to targetCategoryRotation(
                         mapOf(RouletteCategory.PUNISHMENT to stats),
                         RouletteCategory.PUNISHMENT
@@ -482,7 +502,10 @@ class FirebaseRouletteRepository(
                 ),
                 SetOptions.merge()
             )
-            transaction.set(auditRef(sessionId), auditMap(user, "OPEN_PUNISHMENT_WHEEL", "question_failed"))
+            transaction.set(
+                auditRef(sessionId),
+                auditMap(user, "OPEN_PUNISHMENT_WHEEL", "question_failed level=${failedDifficulty?.firestoreValue ?: "none"}")
+            )
             null
         }.await()
     }
@@ -571,6 +594,7 @@ class FirebaseRouletteRepository(
                     SELECTED_CONTENT_ID to null,
                     SELECTED_CONTENT_NUMBER to null,
                     SELECTED_CONTENT_TEXT to null,
+                    PENDING_PUNISHMENT_DIFFICULTY to null,
                     CATEGORY_ROTATION to 0f,
                     CONTENT_ROTATION to 0f,
                     STARTED_AT to null,
@@ -600,6 +624,20 @@ class FirebaseRouletteRepository(
         if (!memberSnapshot.exists() || memberSnapshot.getBoolean(ACTIVE) != true) {
             throw FirebaseFirestoreException("Only active members can do this.", FirebaseFirestoreException.Code.PERMISSION_DENIED)
         }
+    }
+
+    // Un fallo reciente carga los dados: los castigos del mismo nivel pesan PUNISHMENT_MATCH_WEIGHT
+    // frente a 1 del resto. Sin nivel pendiente (o sin dificultades) el sorteo es uniforme.
+    private fun pickWeightedContentId(stats: CategoryStats, preferredDifficulty: Difficulty?): String {
+        val ids = stats.availableContentIds
+        if (preferredDifficulty == null) return ids.random()
+        val weights = ids.map { id -> if (stats.difficulties[id] == preferredDifficulty) PUNISHMENT_MATCH_WEIGHT else 1 }
+        var ticket = Random.nextInt(weights.sum())
+        ids.forEachIndexed { index, id ->
+            ticket -= weights[index]
+            if (ticket < 0) return id
+        }
+        return ids.last()
     }
 
     private fun chooseWeighted(stats: List<CategoryStats>): CategoryStats {
@@ -667,7 +705,8 @@ class FirebaseRouletteRepository(
             contentRotation = getDouble(CONTENT_ROTATION)?.toFloat() ?: 0f,
             startedAtMillis = getTimestampMillis(STARTED_AT),
             completedAtMillis = getTimestampMillis(COMPLETED_AT),
-            updatedAtMillis = getTimestampMillis(UPDATED_AT)
+            updatedAtMillis = getTimestampMillis(UPDATED_AT),
+            pendingPunishmentDifficulty = Difficulty.fromFirestore(getString(PENDING_PUNISHMENT_DIFFICULTY))
         )
     }
 
@@ -687,7 +726,8 @@ class FirebaseRouletteRepository(
             usedByName = getString(USED_BY_NAME),
             usedSpinId = getString(USED_SPIN_ID),
             createdAtMillis = getTimestampMillis(CREATED_AT),
-            updatedAtMillis = getTimestampMillis(UPDATED_AT)
+            updatedAtMillis = getTimestampMillis(UPDATED_AT),
+            difficulty = Difficulty.fromFirestore(getString(DIFFICULTY))
         )
     }
 
@@ -699,7 +739,8 @@ class FirebaseRouletteRepository(
             availableCount = getLong(AVAILABLE_COUNT)?.toInt() ?: availableIds().size,
             usedCount = getLong(USED_COUNT)?.toInt() ?: 0,
             availableContentIds = availableIds(),
-            contentHashes = stringList(CONTENT_HASHES)
+            contentHashes = stringList(CONTENT_HASHES),
+            difficulties = difficultyMap()
         )
     }
 
@@ -744,7 +785,8 @@ class FirebaseRouletteRepository(
         availableCount = availableCount,
         usedCount = usedCount,
         availableContentIds = availableContentIds.toMutableList(),
-        contentHashes = contentHashes.toMutableList()
+        contentHashes = contentHashes.toMutableList(),
+        difficulties = difficulties.toMutableMap()
     )
 
     private fun MutableCategoryStats.toFirestore(category: RouletteCategory): Map<String, Any?> = mapOf(
@@ -754,11 +796,22 @@ class FirebaseRouletteRepository(
         USED_COUNT to usedCount,
         AVAILABLE_CONTENT_IDS to availableContentIds.distinct(),
         CONTENT_HASHES to contentHashes.distinct(),
+        DIFFICULTIES to difficulties.mapValues { it.value.firestoreValue },
         EXHAUSTED to (totalCount > 0 && availableCount == 0),
         UPDATED_AT to Date()
     )
 
     private fun DocumentSnapshot.availableIds(): List<String> = stringList(AVAILABLE_CONTENT_IDS)
+
+    private fun DocumentSnapshot.difficultyMap(): Map<String, Difficulty> = (get(DIFFICULTIES) as? Map<*, *>)
+        ?.entries
+        ?.mapNotNull { (key, value) ->
+            val id = key as? String ?: return@mapNotNull null
+            val difficulty = Difficulty.fromFirestore(value as? String) ?: return@mapNotNull null
+            id to difficulty
+        }
+        ?.toMap()
+        .orEmpty()
 
     private fun DocumentSnapshot.stringList(field: String): List<String> = (get(field) as? List<*>)
         ?.mapNotNull { it as? String }
@@ -775,7 +828,8 @@ class FirebaseRouletteRepository(
         var availableCount: Int,
         var usedCount: Int,
         var availableContentIds: MutableList<String>,
-        var contentHashes: MutableList<String>
+        var contentHashes: MutableList<String>,
+        var difficulties: MutableMap<String, Difficulty>
     )
 
     private companion object {
@@ -794,6 +848,8 @@ class FirebaseRouletteRepository(
         const val CATEGORY = "category"
         const val NUMBER = "number"
         const val TEXT = "text"
+        const val DIFFICULTY = "difficulty"
+        const val DIFFICULTIES = "difficulties"
         const val SEARCH_HASH = "searchHash"
         const val IMPORT_HASH = "importHash"
         const val IMPORT_ID = "importId"
@@ -828,6 +884,8 @@ class FirebaseRouletteRepository(
         const val CONTENT_ROTATION = "contentRotation"
         const val STARTED_AT = "startedAt"
         const val COMPLETED_AT = "completedAt"
+        const val PENDING_PUNISHMENT_DIFFICULTY = "pendingPunishmentDifficulty"
+        const val PUNISHMENT_MATCH_WEIGHT = 4
 
         const val SPIN_ID = "spinId"
         const val CONTENT_ID = "contentId"

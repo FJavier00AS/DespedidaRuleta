@@ -171,8 +171,14 @@ class RouletteViewModel(
             _uiState.update { it.copy(actionLoading = true, errorMessage = null, infoMessage = null) }
             try {
                 if (!success && selectedCategory == RouletteCategory.QUESTION) {
+                    val failedDifficulty = _uiState.value.content
+                        .firstOrNull { it.id == _uiState.value.gameState.selectedContentId }
+                        ?.difficulty
                     rouletteRepository.openPunishmentWheel(user, sessionId)
-                    _uiState.update { it.copy(actionLoading = false, infoMessage = "Fallo registrado. Gira la ruleta de castigos.") }
+                    val levelNote = failedDifficulty
+                        ?.let { " Los castigos nivel ${it.punishmentLabel} tienen mas papeletas." }
+                        .orEmpty()
+                    _uiState.update { it.copy(actionLoading = false, infoMessage = "Fallo registrado. Gira la ruleta de castigos.$levelNote") }
                 } else {
                     rouletteRepository.returnToCategoryWheel(user, sessionId)
                     _uiState.update { it.copy(actionLoading = false, infoMessage = "Volviendo a la ruleta principal.") }
