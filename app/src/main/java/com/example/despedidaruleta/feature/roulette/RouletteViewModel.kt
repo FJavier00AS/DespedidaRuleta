@@ -140,8 +140,21 @@ class RouletteViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(actionLoading = true, errorMessage = null, infoMessage = null) }
             try {
-                rouletteRepository.openCategoryWheel(user, sessionId, RouletteCategory.CHALLENGE)
-                _uiState.update { it.copy(actionLoading = false, infoMessage = "Sección relámpago lista. Responde rápido.") }
+                rouletteRepository.startLightningRound(user, sessionId, LIGHTNING_ROUND_SIZE)
+                _uiState.update { it.copy(actionLoading = false, infoMessage = "Ronda relámpago lista. Responde rápido.") }
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
+            }
+        }
+    }
+
+    fun closeLightningSummary() {
+        val user = authRepository.currentUser ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(actionLoading = true, errorMessage = null) }
+            try {
+                rouletteRepository.closeLightningRound(user, sessionId)
+                _uiState.update { it.copy(actionLoading = false, infoMessage = "Ruleta lista para otro giro.") }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
             }
@@ -187,8 +200,8 @@ class RouletteViewModel(
                     rouletteRepository.openPunishmentWheel(user, sessionId)
                     _uiState.update { it.copy(actionLoading = false, infoMessage = "Fallo registrado. Gira la ruleta de castigos.") }
                 } else if (selectedCategory == RouletteCategory.CHALLENGE) {
-                    rouletteRepository.openCategoryWheel(user, sessionId, RouletteCategory.CHALLENGE)
-                    _uiState.update { it.copy(actionLoading = false, infoMessage = "Otra pregunta relámpago. ¡Sigue!" ) }
+                    rouletteRepository.advanceLightningRound(user, sessionId, success)
+                    _uiState.update { it.copy(actionLoading = false) }
                 } else {
                     rouletteRepository.returnToCategoryWheel(user, sessionId)
                     val message = if (selectedCategory == RouletteCategory.QUESTION && success) {
@@ -226,6 +239,7 @@ class RouletteViewModel(
     }
 
     private companion object {
+        const val LIGHTNING_ROUND_SIZE = 10
         val PRIZE_MESSAGES = listOf(
             "¡Premio! Respuesta correcta. Cobra tu billete falso del banco.",
             "¡Acertaste! El banco te debe un billete de mentira.",

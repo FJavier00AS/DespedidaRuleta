@@ -27,4 +27,8 @@ interface RouletteRepository {
     suspend fun openPunishmentWheel(user: AuthUser, sessionId: String)
     suspend fun restoreSpin(user: AuthUser, sessionId: String, spinId: String)
     suspend fun resetGame(user: AuthUser, sessionId: String)
+
+    suspend fun startLightningRound(user: AuthUser, sessionId: String, roundSize: Int)
+    suspend fun advanceLightningRound(user: AuthUser, sessionId: String, success: Boolean)
+    suspend fun closeLightningRound(user: AuthUser, sessionId: String)
 }

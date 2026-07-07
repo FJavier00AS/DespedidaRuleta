@@ -92,7 +92,10 @@ service cloud.firestore {
         'contentRotation',
         'startedAt',
         'completedAt',
-        'updatedAt'
+        'updatedAt',
+        'lightningTotal',
+        'lightningAnswered',
+        'lightningCorrect'
       ];
     }
 
@@ -324,7 +327,8 @@ service cloud.firestore {
             'CATEGORY_SELECTED',
             'CONTENT_SPINNING',
             'COMPLETED',
-            'EXHAUSTED'
+            'EXHAUSTED',
+            'LIGHTNING_SUMMARY'
           ];
         allow delete: if isOwner(sessionId);
       }

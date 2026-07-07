@@ -333,6 +333,7 @@ fun DespedidaRuletaApp(
                 onOpenLightningSection = viewModel::openLightningSection,
                 onSpinContent = viewModel::spinContent,
                 onResolveResult = viewModel::resolveResult,
+                onCloseLightningSummary = viewModel::closeLightningSummary,
                 onResetGame = viewModel::resetGame,
                 onOpenAdmin = { navController.navigate(AppRoutes.sessionAdmin(sessionId)) },
                 onOpenHistory = { navController.navigate(AppRoutes.sessionHistory(sessionId)) },

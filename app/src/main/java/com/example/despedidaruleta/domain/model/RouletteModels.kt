@@ -1,6 +1,7 @@
 ﻿package com.example.despedidaruleta.domain.model
 
 import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 
 enum class RouletteCategory(val firestoreValue: String, val label: String) {
     QUESTION("QUESTION", "Preguntas"),
@@ -30,7 +31,8 @@ enum class GamePhase(val firestoreValue: String, val label: String) {
     CATEGORY_SELECTED("CATEGORY_SELECTED", "Categoria elegida"),
     CONTENT_SPINNING("CONTENT_SPINNING", "Girando"),
     COMPLETED("COMPLETED", "Completada"),
-    EXHAUSTED("EXHAUSTED", "Sin contenido");
+    EXHAUSTED("EXHAUSTED", "Sin contenido"),
+    LIGHTNING_SUMMARY("LIGHTNING_SUMMARY", "Resumen relámpago");
 
     companion object {
         fun fromFirestore(value: String?): GamePhase = entries.firstOrNull { it.firestoreValue == value } ?: IDLE
@@ -85,8 +87,14 @@ data class RouletteGameState(
     val contentRotation: Float = 0f,
     val startedAtMillis: Long? = null,
     val completedAtMillis: Long? = null,
-    val updatedAtMillis: Long? = null
-)
+    val updatedAtMillis: Long? = null,
+    val lightningTotal: Int = 0,
+    val lightningAnswered: Int = 0,
+    val lightningCorrect: Int = 0
+) {
+    val lightningIncorrect: Int = (lightningAnswered - lightningCorrect).coerceAtLeast(0)
+    val lightningPercent: Int = if (lightningAnswered > 0) ((lightningCorrect * 100f) / lightningAnswered).roundToInt() else 0
+}
 
 data class SpinRecord(
     val id: String,
