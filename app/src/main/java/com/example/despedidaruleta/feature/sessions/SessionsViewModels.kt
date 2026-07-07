@@ -24,7 +24,9 @@ data class SessionsListUiState(
     val isLoading: Boolean = true,
     val fromCache: Boolean = false,
     val networkStatus: NetworkStatus = NetworkStatus.ONLINE,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val sessionPendingDeletion: SessionSummary? = null,
+    val isDeleting: Boolean = false
 )
 
 data class CreateSessionUiState(
@@ -94,6 +96,33 @@ class SessionsListViewModel(
 
     fun signOut() {
         authRepository.signOut()
+    }
+
+    fun requestDeleteSession(session: SessionSummary) {
+        _uiState.update { it.copy(sessionPendingDeletion = session) }
+    }
+
+    fun cancelDeleteSession() {
+        _uiState.update { it.copy(sessionPendingDeletion = null) }
+    }
+
+    fun confirmDeleteSession() {
+        val session = _uiState.value.sessionPendingDeletion ?: return
+        val user = authRepository.currentUser
+        if (user == null) {
+            _uiState.update { it.copy(errorMessage = "La sesion de usuario ha caducado. Inicia sesion de nuevo.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeleting = true, errorMessage = null) }
+            runCatching {
+                sessionRepository.deleteSession(user, session.id)
+            }.onSuccess {
+                _uiState.update { it.copy(isDeleting = false, sessionPendingDeletion = null) }
+            }.onFailure { error ->
+                _uiState.update { it.copy(isDeleting = false, errorMessage = error.toUserMessage()) }
+            }
+        }
     }
 }
 

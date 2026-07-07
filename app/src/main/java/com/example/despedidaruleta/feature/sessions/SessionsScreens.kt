@@ -16,8 +16,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -51,7 +53,10 @@ fun SessionsListScreen(
     onCreateSession: () -> Unit,
     onJoinSession: () -> Unit,
     onOpenSession: (String) -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onRequestDeleteSession: (SessionSummary) -> Unit,
+    onCancelDeleteSession: () -> Unit,
+    onConfirmDeleteSession: () -> Unit
 ) {
     VegasBackground {
         LazyColumn(
@@ -101,11 +106,55 @@ fun SessionsListScreen(
                     )
                 }
                 else -> items(uiState.sessions, key = { it.id }) { session ->
-                    SessionSummaryCard(session = session, onClick = { onOpenSession(session.id) })
+                    SessionSummaryCard(
+                        session = session,
+                        onClick = { onOpenSession(session.id) },
+                        onDeleteClick = { onRequestDeleteSession(session) }
+                    )
                 }
             }
         }
     }
+
+    DeleteSessionDialog(
+        session = uiState.sessionPendingDeletion,
+        isDeleting = uiState.isDeleting,
+        onConfirm = onConfirmDeleteSession,
+        onDismiss = onCancelDeleteSession
+    )
+}
+
+@Composable
+private fun DeleteSessionDialog(
+    session: SessionSummary?,
+    isDeleting: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (session == null) return
+    AlertDialog(
+        onDismissRequest = { if (!isDeleting) onDismiss() },
+        containerColor = VegasColors.Card,
+        titleContentColor = VegasColors.TextPrimary,
+        textContentColor = VegasColors.TextPrimary,
+        title = { Text(text = "Eliminar sesion", style = MaterialTheme.typography.headlineSmall) },
+        text = {
+            Text(
+                text = "Se eliminara \"${session.eventName}\" para ti. Esta accion no se puede deshacer.",
+                color = VegasColors.TextSecondary
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = !isDeleting) {
+                Text(text = "Eliminar", color = VegasColors.Error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isDeleting) {
+                Text(text = "Cancelar", color = VegasColors.Gold)
+            }
+        }
+    )
 }
 
 @Composable
@@ -138,7 +187,8 @@ private fun SessionsHeader(
 @Composable
 private fun SessionSummaryCard(
     session: SessionSummary,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     VegasCard(
         modifier = Modifier.clickable(onClick = onClick)
@@ -157,9 +207,23 @@ private fun SessionSummaryCard(
                 style = MaterialTheme.typography.bodyLarge,
                 color = VegasColors.TextSecondary
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "Codigo ${session.joinCode}", color = VegasColors.TextPrimary, fontWeight = FontWeight.Bold)
-                Text(text = session.status.label, color = VegasColors.TextSecondary)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "Codigo ${session.joinCode}", color = VegasColors.TextPrimary, fontWeight = FontWeight.Bold)
+                    Text(text = session.status.label, color = VegasColors.TextSecondary)
+                }
+                if (session.role == SessionRole.OWNER) {
+                    Text(
+                        text = "Eliminar",
+                        color = VegasColors.Error,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.clickable(onClick = onDeleteClick)
+                    )
+                }
             }
         }
     }
@@ -316,7 +380,10 @@ private fun SessionsListPreview() {
             onCreateSession = {},
             onJoinSession = {},
             onOpenSession = {},
-            onSignOut = {}
+            onSignOut = {},
+            onRequestDeleteSession = {},
+            onCancelDeleteSession = {},
+            onConfirmDeleteSession = {}
         )
     }
 }

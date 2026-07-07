@@ -232,6 +232,19 @@ class FirebaseSessionRepository(
         throw SessionJoinLimitException()
     }
 
+    override suspend fun deleteSession(user: AuthUser, sessionId: String) {
+        val sessionRef = firestore.collection(SESSIONS).document(sessionId)
+        val userSessionRef = firestore.collection(USERS)
+            .document(user.uid)
+            .collection(SESSION_REFS)
+            .document(sessionId)
+
+        val batch = firestore.batch()
+        batch.delete(userSessionRef)
+        batch.delete(sessionRef)
+        batch.commit().await()
+    }
+
     private suspend fun reserveSessionWithCode(
         owner: AuthUser,
         eventName: String,

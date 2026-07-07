@@ -29,4 +29,6 @@ interface SessionRepository {
     )
 
     suspend fun regenerateJoinCode(user: AuthUser, sessionId: String): RegeneratedJoinCode
+
+    suspend fun deleteSession(user: AuthUser, sessionId: String)
 }

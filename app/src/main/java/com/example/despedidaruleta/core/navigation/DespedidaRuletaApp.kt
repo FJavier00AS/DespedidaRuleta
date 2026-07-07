@@ -177,7 +177,10 @@ fun DespedidaRuletaApp(
                     navController.navigate(AppRoutes.Welcome) {
                         popUpTo(AppRoutes.Sessions) { inclusive = true }
                     }
-                }
+                },
+                onRequestDeleteSession = viewModel::requestDeleteSession,
+                onCancelDeleteSession = viewModel::cancelDeleteSession,
+                onConfirmDeleteSession = viewModel::confirmDeleteSession
             )
         }
 
