@@ -9,7 +9,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class NotificationRelayClient {
-    suspend fun broadcast(sessionId: String, title: String, body: String) = withContext(Dispatchers.IO) {
+    suspend fun broadcast(sessionId: String, title: String, body: String, route: String? = null) = withContext(Dispatchers.IO) {
         check(BuildConfig.RELAY_BASE_URL.isNotBlank()) { "RELAY_BASE_URL no esta configurada en local.properties" }
 
         val payload = JSONObject()
@@ -17,6 +17,7 @@ class NotificationRelayClient {
             .put("title", title)
             .put("body", body)
             .put("secret", BuildConfig.RELAY_SECRET)
+        if (!route.isNullOrBlank()) payload.put("route", route)
 
         val url = URL("${BuildConfig.RELAY_BASE_URL}/api/notify")
         val connection = url.openConnection() as HttpURLConnection

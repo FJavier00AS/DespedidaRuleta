@@ -10,6 +10,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.despedidaruleta.MainActivity
 import com.example.despedidaruleta.R
+import com.example.despedidaruleta.feature.events.EventsViewModel
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -18,6 +19,7 @@ class DespedidaMessagingService : FirebaseMessagingService() {
         val title = message.data[KEY_TITLE]?.takeIf { it.isNotBlank() } ?: "Despedida Ruleta"
         val body = message.data[KEY_BODY].orEmpty()
         val sessionId = message.data[KEY_SESSION_ID]
+        val route = message.data[KEY_ROUTE]
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
@@ -31,6 +33,7 @@ class DespedidaMessagingService : FirebaseMessagingService() {
         val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (!sessionId.isNullOrBlank()) putExtra(SessionReminderWorker.EXTRA_SESSION_ID, sessionId)
+            if (!route.isNullOrBlank()) putExtra(EventsViewModel.EXTRA_EVENT_ROUTE, route)
         }
         val notificationId = (sessionId ?: title).hashCode()
         val pendingIntent = PendingIntent.getActivity(
@@ -56,5 +59,6 @@ class DespedidaMessagingService : FirebaseMessagingService() {
         const val KEY_TITLE = "title"
         const val KEY_BODY = "body"
         const val KEY_SESSION_ID = "sessionId"
+        const val KEY_ROUTE = "route"
     }
 }

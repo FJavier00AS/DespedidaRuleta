@@ -2,17 +2,8 @@ package com.example.despedidaruleta.feature.events
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import android.os.Build
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import com.example.despedidaruleta.MainActivity
-import com.example.despedidaruleta.R
 import com.example.despedidaruleta.core.navigation.AppRoutes
+import com.example.despedidaruleta.core.notification.NotificationRelayClient
 import com.example.despedidaruleta.domain.model.ContentItem
 import com.example.despedidaruleta.domain.model.RouletteCategory
 import com.example.despedidaruleta.domain.repository.AuthRepository
@@ -41,7 +32,7 @@ class EventsViewModel(
     private val sessionId: String,
     private val authRepository: AuthRepository,
     private val rouletteRepository: RouletteRepository,
-    private val appContext: Context
+    private val notificationRelayClient: NotificationRelayClient
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(EventsUiState())
     val uiState: StateFlow<EventsUiState> = _uiState.asStateFlow()
@@ -166,45 +157,21 @@ class EventsViewModel(
     }
 
     private fun showEventNotification(event: ContentItem) {
-        ensureNotificationChannel()
-        val launchIntent = Intent(appContext, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(AppRoutes.SessionIdArg, sessionId)
-            putExtra(EXTRA_EVENT_ROUTE, AppRoutes.sessionEvents(sessionId))
+        viewModelScope.launch {
+            runCatching {
+                notificationRelayClient.broadcast(
+                    sessionId = sessionId,
+                    title = "Evento aleatorio",
+                    body = event.text,
+                    route = AppRoutes.sessionEvents(sessionId)
+                )
+            }.onFailure { error ->
+                _uiState.update { it.copy(errorMessage = "No se pudo avisar al grupo: ${error.message}") }
+            }
         }
-        val pendingIntent = PendingIntent.getActivity(
-            appContext,
-            event.id.hashCode(),
-            launchIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Evento aleatorio")
-            .setContentText(event.text)
-            .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .build()
-        NotificationManagerCompat.from(appContext).notify(event.id.hashCode(), notification)
-    }
-
-    private fun ensureNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Eventos aleatorios",
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            description = "Avisos de eventos aleatorios activos"
-        }
-        manager.createNotificationChannel(channel)
     }
 
     companion object {
-        private const val CHANNEL_ID = "roulette_events"
         private const val EVENT_INTERVAL_MS = 30L * 60L * 1_000L
         const val EXTRA_EVENT_ROUTE = "extra_event_route"
 

@@ -385,7 +385,7 @@ fun DespedidaRuletaApp(
                             sessionId = sessionId,
                             authRepository = container.authRepository,
                             rouletteRepository = container.rouletteRepository,
-                            appContext = container.appContext
+                            notificationRelayClient = container.notificationRelayClient
                         )
                     }
                 }

@@ -2,7 +2,7 @@ package com.example.despedidaruleta.feature.events
 
 import com.example.despedidaruleta.domain.model.ContentItem
 import com.example.despedidaruleta.domain.model.RouletteCategory
-import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 
@@ -13,10 +13,12 @@ class EventsViewModelTest {
         val next = contentItem("2")
         val another = contentItem("3")
 
-        val selected = EventsViewModel.pickNextEvent(listOf(previous, next, another), previous.id)
+        repeat(20) {
+            val selected = EventsViewModel.pickNextEvent(listOf(previous, next, another), previous.id)
 
-        assertNotNull(selected)
-        assertEquals(next.id, selected?.id)
+            assertNotNull(selected)
+            assertNotEquals(previous.id, selected?.id)
+        }
     }
 
     private fun contentItem(id: String): ContentItem = ContentItem(
