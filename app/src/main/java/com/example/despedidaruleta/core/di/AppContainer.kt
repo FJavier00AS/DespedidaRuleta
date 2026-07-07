@@ -3,6 +3,8 @@
 import android.content.Context
 import com.example.despedidaruleta.core.connectivity.AndroidConnectivityRepository
 import com.example.despedidaruleta.core.notification.AndroidNotificationScheduler
+import com.example.despedidaruleta.core.notification.FcmTopicManager
+import com.example.despedidaruleta.core.notification.NotificationRelayClient
 import com.example.despedidaruleta.core.notification.NotificationScheduler
 import com.example.despedidaruleta.data.auth.FirebaseAuthRepository
 import com.example.despedidaruleta.data.importer.XlsxContentImportParser
@@ -30,4 +32,6 @@ class AppContainer(context: Context) {
     val contentImportParser: ContentImportParser = XlsxContentImportParser(context.applicationContext)
     val localSettingsRepository: LocalSettingsRepository = DataStoreLocalSettingsRepository(context.applicationContext)
     val notificationScheduler: NotificationScheduler = AndroidNotificationScheduler(context.applicationContext)
+    val fcmTopicManager: FcmTopicManager = FcmTopicManager()
+    val notificationRelayClient: NotificationRelayClient = NotificationRelayClient()
 }

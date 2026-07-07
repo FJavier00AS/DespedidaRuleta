@@ -239,7 +239,8 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                             sessionId = sessionId,
                             authRepository = container.authRepository,
                             sessionRepository = container.sessionRepository,
-                            connectivityRepository = container.connectivityRepository
+                            connectivityRepository = container.connectivityRepository,
+                            fcmTopicManager = container.fcmTopicManager
                         )
                     }
                 }
@@ -340,6 +341,7 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                             authRepository = container.authRepository,
                             rouletteRepository = container.rouletteRepository,
                             parser = container.contentImportParser,
+                            notificationRelayClient = container.notificationRelayClient,
                             connectivityRepository = container.connectivityRepository
                         )
                     }
@@ -353,6 +355,7 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                 onConfirmImport = viewModel::confirmImport,
                 onLoadDemoContent = viewModel::loadDemoContent,
                 onClearPreview = viewModel::clearPreview,
+                onSendTestBroadcast = viewModel::sendTestBroadcast,
                 onBack = { navController.popBackStack() }
             )
         }

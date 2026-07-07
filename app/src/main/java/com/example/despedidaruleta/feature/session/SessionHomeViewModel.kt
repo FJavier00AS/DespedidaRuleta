@@ -3,6 +3,7 @@
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.despedidaruleta.core.common.toUserMessage
+import com.example.despedidaruleta.core.notification.FcmTopicManager
 import com.example.despedidaruleta.domain.model.NetworkStatus
 import com.example.despedidaruleta.domain.model.SessionDetail
 import com.example.despedidaruleta.domain.repository.AuthRepository
@@ -27,7 +28,8 @@ class SessionHomeViewModel(
     sessionId: String,
     authRepository: AuthRepository,
     sessionRepository: SessionRepository,
-    connectivityRepository: ConnectivityRepository
+    connectivityRepository: ConnectivityRepository,
+    fcmTopicManager: FcmTopicManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SessionHomeUiState())
     val uiState: StateFlow<SessionHomeUiState> = _uiState.asStateFlow()
@@ -37,6 +39,10 @@ class SessionHomeViewModel(
             connectivityRepository.networkStatus.collect { status ->
                 _uiState.update { it.copy(networkStatus = status) }
             }
+        }
+
+        viewModelScope.launch {
+            runCatching { fcmTopicManager.subscribe(sessionId) }
         }
 
         val user = authRepository.currentUser

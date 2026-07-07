@@ -1,8 +1,6 @@
 ﻿package com.example.despedidaruleta.core.notification
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -37,7 +35,7 @@ class SessionReminderWorker(
             if (!granted) return Result.success()
         }
 
-        ensureChannel()
+        NotificationChannels.ensureRemindersChannel(applicationContext)
         val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_SESSION_ID, sessionId)
@@ -51,7 +49,7 @@ class SessionReminderWorker(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(applicationContext, NotificationChannels.REMINDERS_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Despedida Ruleta")
             .setContentText("Toca girar o preparar la siguiente ronda.")
@@ -77,20 +75,6 @@ class SessionReminderWorker(
         }
     }
 
-    private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = applicationContext.getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Avisos de ruleta",
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            description = "Recordatorios locales de la sesion activa"
-        }
-        manager.createNotificationChannel(channel)
-    }
-
     companion object {
         const val KEY_SESSION_ID = "session_id"
         const val KEY_QUIET_START = "quiet_start"
@@ -98,6 +82,5 @@ class SessionReminderWorker(
         const val KEY_SOUND = "sound"
         const val KEY_HAPTIC = "haptic"
         const val EXTRA_SESSION_ID = "session_id"
-        private const val CHANNEL_ID = "roulette_reminders"
     }
 }

@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.despedidaruleta.core.common.toUserMessage
+import com.example.despedidaruleta.core.notification.NotificationRelayClient
 import com.example.despedidaruleta.domain.model.CategoryStats
 import com.example.despedidaruleta.domain.model.ContentItem
 import com.example.despedidaruleta.domain.model.ImportPreview
@@ -31,7 +32,9 @@ data class AdminUiState(
     val isImporting: Boolean = false,
     val fromCache: Boolean = false,
     val networkStatus: NetworkStatus = NetworkStatus.ONLINE,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val infoMessage: String? = null,
+    val isSendingBroadcast: Boolean = false
 )
 
 class AdminViewModel(
@@ -39,6 +42,7 @@ class AdminViewModel(
     private val authRepository: AuthRepository,
     private val rouletteRepository: RouletteRepository,
     private val parser: ContentImportParser,
+    private val notificationRelayClient: NotificationRelayClient,
     connectivityRepository: ConnectivityRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AdminUiState())
@@ -114,6 +118,22 @@ class AdminViewModel(
 
     fun clearPreview() {
         _uiState.update { it.copy(preview = null, result = null, errorMessage = null) }
+    }
+
+    fun sendTestBroadcast() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSendingBroadcast = true, errorMessage = null, infoMessage = null) }
+            try {
+                notificationRelayClient.broadcast(
+                    sessionId = sessionId,
+                    title = "Despedida Ruleta",
+                    body = "Aviso de prueba: la sesion esta en marcha."
+                )
+                _uiState.update { it.copy(isSendingBroadcast = false, infoMessage = "Aviso enviado a todo el grupo.") }
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(isSendingBroadcast = false, errorMessage = error.toUserMessage()) }
+            }
+        }
     }
 
     private fun showError(error: Throwable) {
