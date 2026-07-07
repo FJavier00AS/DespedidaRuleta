@@ -26,8 +26,7 @@ data class EventsUiState(
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
     val isPaused: Boolean = false,
-    val awaitingCompletion: Boolean = false,
-    val nextEventInSeconds: Long = 0L
+    val awaitingCompletion: Boolean = false
 )
 
 class EventsViewModel(
@@ -103,8 +102,7 @@ class EventsViewModel(
                     currentEvent = nextEvent,
                     history = if (nextEvent != null) listOf(nextEvent) else emptyList(),
                     isPaused = false,
-                    awaitingCompletion = nextEvent != null,
-                    nextEventInSeconds = 0L
+                    awaitingCompletion = nextEvent != null
                 )
             }
             startTicker(events)
@@ -114,29 +112,21 @@ class EventsViewModel(
     fun markCurrentEventCompleted() {
         if (_uiState.value.currentEvent == null || !_uiState.value.awaitingCompletion) return
         val now = System.currentTimeMillis()
-        val intervalMs = randomIntervalMs()
         lastEventTimestampMs = now
-        nextEventTimestampMs = now + intervalMs
-        _uiState.update {
-            it.copy(
-                awaitingCompletion = false,
-                nextEventInSeconds = (intervalMs / 1_000).coerceAtLeast(0)
-            )
-        }
+        nextEventTimestampMs = now + randomIntervalMs()
+        _uiState.update { it.copy(awaitingCompletion = false) }
     }
 
     private fun startTicker(events: List<ContentItem>) {
         tickerJob?.cancel()
         tickerJob = viewModelScope.launch {
             while (_uiState.value.isActive) {
-                delay(1_000)
+                delay(5_000)
                 if (events.isEmpty() || _uiState.value.awaitingCompletion) {
                     continue
                 }
 
-                val now = System.currentTimeMillis()
-
-                if (now >= nextEventTimestampMs) {
+                if (System.currentTimeMillis() >= nextEventTimestampMs) {
                     val next = pickNextEvent(events, lastEventId)
                     if (next != null) {
                         lastEventId = next.id
@@ -146,25 +136,12 @@ class EventsViewModel(
                                 currentEvent = next,
                                 history = listOf(next) + it.history.take(4),
                                 isPaused = false,
-                                awaitingCompletion = true,
-                                nextEventInSeconds = 0L
+                                awaitingCompletion = true
                             )
                         }
                     }
-                } else {
-                    refreshCountdown(now)
                 }
             }
-        }
-    }
-
-    private fun refreshCountdown(now: Long = System.currentTimeMillis()) {
-        val remainingMs = if (nextEventTimestampMs > 0L) (nextEventTimestampMs - now).coerceAtLeast(0) else 0L
-        _uiState.update {
-            it.copy(
-                nextEventInSeconds = (remainingMs / 1_000).coerceAtLeast(0),
-                isPaused = false
-            )
         }
     }
 

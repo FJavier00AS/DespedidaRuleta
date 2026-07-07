@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.despedidaruleta.core.designsystem.component.LoadingState
-import java.util.concurrent.TimeUnit
 import com.example.despedidaruleta.core.designsystem.component.MessageBanner
 import com.example.despedidaruleta.core.designsystem.component.SectionTitle
 import com.example.despedidaruleta.core.designsystem.component.VegasBackground
@@ -51,9 +50,9 @@ fun EventsScreen(
                     Text(
                         text = if (uiState.isActive) {
                             when {
-                                uiState.isPaused -> "Pausado por la ruleta. El contador seguirá esperando a que vuelva la partida."
-                                uiState.awaitingCompletion -> "Marca el evento actual como completado para que empiece la cuenta atrás del siguiente."
-                                else -> "Activo: el próximo evento tardará entre 5 y 20 minutos."
+                                uiState.isPaused -> "Pausado por la ruleta. Seguirá esperando a que vuelva la partida."
+                                uiState.awaitingCompletion -> "Marca el evento actual como completado para que el siguiente pueda sorprenderos."
+                                else -> "Activo: el próximo evento puede llegar en cualquier momento. Sorpresa."
                             }
                         } else {
                             "Inactivo: activa este modo para empezar a lanzar eventos aleatorios."
@@ -84,8 +83,8 @@ fun EventsScreen(
                                 text = if (uiState.isActive) {
                                     when {
                                         uiState.awaitingCompletion -> "Marca el evento como completado para seguir."
-                                        uiState.isPaused -> "Próximo evento en ${formatDuration(uiState.nextEventInSeconds)} (pausado por la ruleta)"
-                                        else -> "Próximo evento en ${formatDuration(uiState.nextEventInSeconds)}"
+                                        uiState.isPaused -> "En pausa por la ruleta. El siguiente evento es sorpresa."
+                                        else -> "El siguiente evento es sorpresa: puede llegar en cualquier momento."
                                     }
                                 } else {
                                     "Activa el modo para empezar a lanzar eventos."
@@ -119,15 +118,5 @@ fun EventsScreen(
                 }
             }
         }
-    }
-}
-
-private fun formatDuration(seconds: Long): String {
-    val minutes = TimeUnit.SECONDS.toMinutes(seconds)
-    val remainingSeconds = seconds - TimeUnit.MINUTES.toSeconds(minutes)
-    return if (minutes > 0) {
-        "${minutes}m ${remainingSeconds}s"
-    } else {
-        "${remainingSeconds}s"
     }
 }
