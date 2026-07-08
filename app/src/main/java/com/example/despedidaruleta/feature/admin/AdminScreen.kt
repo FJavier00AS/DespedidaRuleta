@@ -40,6 +40,7 @@ fun AdminScreen(
     onConfirmImport: () -> Unit,
     onLoadDemoContent: () -> Unit,
     onClearPreview: () -> Unit,
+    onSendTestBroadcast: () -> Unit,
     onBack: () -> Unit
 ) {
     var pendingCategory by remember { mutableStateOf<RouletteCategory?>(null) }
@@ -76,6 +77,7 @@ fun AdminScreen(
             }
             SectionTitle(eyebrow = "Administracion", title = "Contenido de la ruleta")
             if (uiState.errorMessage != null) MessageBanner(message = uiState.errorMessage)
+            if (uiState.infoMessage != null) MessageBanner(message = uiState.infoMessage, isError = false)
             uiState.result?.let { result ->
                 MessageBanner(
                     message = "Importacion lista: ${result.inserted} insertadas, ${result.skipped} duplicadas.",
@@ -83,6 +85,22 @@ fun AdminScreen(
                 )
             }
             if (uiState.isLoading) LoadingState(message = "Cargando contenido")
+
+            VegasCard {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(text = "Notificaciones", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = "Manda un aviso de prueba a todos los moviles del grupo, aunque tengan la app cerrada.",
+                        color = VegasColors.TextSecondary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    VegasPrimaryButton(
+                        text = "Avisar a todos",
+                        onClick = onSendTestBroadcast,
+                        isLoading = uiState.isSendingBroadcast
+                    )
+                }
+            }
 
             VegasCard {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -137,6 +155,11 @@ fun AdminScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    VegasSecondaryButton(
+                        text = "Eventos",
+                        onClick = { openFile(RouletteCategory.EVENT) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 

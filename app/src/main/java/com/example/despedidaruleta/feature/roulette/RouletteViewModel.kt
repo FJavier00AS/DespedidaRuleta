@@ -34,12 +34,8 @@ data class RouletteUiState(
     val errorMessage: String? = null,
     val infoMessage: String? = null
 ) {
-    val totalAvailable: Int = stats
-        .filter { it.category in RouletteCategory.wheelEntries }
-        .sumOf { it.availableCount }
-    val totalUsed: Int = stats
-        .filter { it.category in RouletteCategory.wheelEntries }
-        .sumOf { it.usedCount }
+    val totalAvailable: Int = stats.filter { it.category in RouletteCategory.wheelEntries }.sumOf { it.availableCount }
+    val totalUsed: Int = stats.filter { it.category in RouletteCategory.wheelEntries }.sumOf { it.usedCount }
     val categorySpinInProgress: Boolean = gameState.phase == GamePhase.CATEGORY_SPINNING
     val contentSpinInProgress: Boolean = gameState.phase == GamePhase.CONTENT_SPINNING
     val canSpinCategory: Boolean = !actionLoading && !categorySpinInProgress && !contentSpinInProgress && totalAvailable > 0
@@ -125,7 +121,7 @@ class RouletteViewModel(
             _uiState.update { it.copy(actionLoading = true, errorMessage = null, infoMessage = null) }
             try {
                 val category = rouletteRepository.startCategorySpin(user, sessionId)
-                _uiState.update { it.copy(infoMessage = "Categoria elegida: ${category.label}") }
+                _uiState.update { it.copy(infoMessage = "Ruleta de ${category.label.lowercase()} lista.") }
                 delay(2_500)
                 rouletteRepository.markCategorySpinCompleted(user, sessionId)
                 _uiState.update { it.copy(actionLoading = false) }
@@ -181,7 +177,12 @@ class RouletteViewModel(
                     _uiState.update { it.copy(actionLoading = false, infoMessage = "Fallo registrado. Gira la ruleta de castigos.$levelNote") }
                 } else {
                     rouletteRepository.returnToCategoryWheel(user, sessionId)
-                    _uiState.update { it.copy(actionLoading = false, infoMessage = "Volviendo a la ruleta principal.") }
+                    val message = if (selectedCategory == RouletteCategory.QUESTION && success) {
+                        PRIZE_MESSAGES.random()
+                    } else {
+                        "Volviendo a la ruleta principal."
+                    }
+                    _uiState.update { it.copy(actionLoading = false, infoMessage = message) }
                 }
             } catch (error: Throwable) {
                 _uiState.update { it.copy(actionLoading = false, errorMessage = error.toUserMessage()) }
@@ -208,5 +209,15 @@ class RouletteViewModel(
 
     private fun showError(error: Throwable) {
         _uiState.update { it.copy(isLoading = false, errorMessage = error.toUserMessage()) }
+    }
+
+    private companion object {
+        val PRIZE_MESSAGES = listOf(
+            "¡Premio! Respuesta correcta. Cobra tu billete falso del banco.",
+            "¡Acertaste! El banco te debe un billete de mentira.",
+            "¡Premio! Que alguien te pague en dinero falso, te lo has ganado.",
+            "¡Correcto! Reclama tu recompensa (de mentira) ya mismo.",
+            "¡Premio! Un billete falso más para tu colección."
+        )
     }
 }

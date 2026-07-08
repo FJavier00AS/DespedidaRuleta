@@ -1,9 +1,15 @@
 ﻿package com.example.despedidaruleta.core.navigation
 
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -11,12 +17,17 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.despedidaruleta.core.di.AppContainer
 import com.example.despedidaruleta.feature.admin.AdminScreen
 import com.example.despedidaruleta.feature.admin.AdminViewModel
 import com.example.despedidaruleta.feature.auth.LoginScreen
+import com.example.despedidaruleta.domain.model.isQuietHourNow
+import com.example.despedidaruleta.feature.events.EventArrivalPopup
+import com.example.despedidaruleta.feature.events.EventsScreen
+import com.example.despedidaruleta.feature.events.EventsViewModel
 import com.example.despedidaruleta.feature.auth.LoginViewModel
 import com.example.despedidaruleta.feature.auth.RegisterScreen
 import com.example.despedidaruleta.feature.auth.RegisterViewModel
@@ -46,13 +57,18 @@ import com.example.despedidaruleta.feature.splash.SplashUiState
 import com.example.despedidaruleta.feature.splash.SplashViewModel
 
 @Composable
-fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null) {
+fun DespedidaRuletaApp(
+    container: AppContainer,
+    initialSessionId: String? = null,
+    initialRoute: String? = null
+) {
     val navController = rememberNavController()
 
-    NavHost(
-        navController = navController,
-        startDestination = AppRoutes.Splash
-    ) {
+    Box {
+        NavHost(
+            navController = navController,
+            startDestination = AppRoutes.Splash
+        ) {
         composable(AppRoutes.Splash) {
             val factory = remember(container) {
                 viewModelFactory {
@@ -65,10 +81,13 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
             LaunchedEffect(uiState) {
                 when (uiState) {
                     SplashUiState.Authenticated -> {
-                        val destination = initialSessionId
-                            ?.takeIf { it.isNotBlank() }
-                            ?.let { AppRoutes.sessionHome(it) }
-                            ?: AppRoutes.Sessions
+                        val destination = when {
+                            initialRoute.isNullOrBlank() -> initialSessionId
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { AppRoutes.sessionHome(it) }
+                                ?: AppRoutes.Sessions
+                            else -> initialRoute
+                        }
                         navController.navigate(destination) {
                             popUpTo(AppRoutes.Splash) { inclusive = true }
                         }
@@ -168,7 +187,10 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                     navController.navigate(AppRoutes.Welcome) {
                         popUpTo(AppRoutes.Sessions) { inclusive = true }
                     }
-                }
+                },
+                onRequestDeleteSession = viewModel::requestDeleteSession,
+                onCancelDeleteSession = viewModel::cancelDeleteSession,
+                onConfirmDeleteSession = viewModel::confirmDeleteSession
             )
         }
 
@@ -241,7 +263,8 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                             sessionId = sessionId,
                             authRepository = container.authRepository,
                             sessionRepository = container.sessionRepository,
-                            connectivityRepository = container.connectivityRepository
+                            connectivityRepository = container.connectivityRepository,
+                            fcmTopicManager = container.fcmTopicManager
                         )
                     }
                 }
@@ -251,6 +274,7 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
             SessionHomeScreen(
                 uiState = uiState,
                 onOpenWheel = { navController.navigate(AppRoutes.sessionWheel(sessionId)) },
+                onOpenEvents = { navController.navigate(AppRoutes.sessionEvents(sessionId)) },
                 onOpenLightning = { navController.navigate(AppRoutes.sessionLightning(sessionId)) },
                 onOpenAdmin = { navController.navigate(AppRoutes.sessionAdmin(sessionId)) },
                 onOpenHistory = { navController.navigate(AppRoutes.sessionHistory(sessionId)) },
@@ -370,6 +394,7 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                             authRepository = container.authRepository,
                             rouletteRepository = container.rouletteRepository,
                             parser = container.contentImportParser,
+                            notificationRelayClient = container.notificationRelayClient,
                             connectivityRepository = container.connectivityRepository
                         )
                     }
@@ -383,6 +408,68 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                 onConfirmImport = viewModel::confirmImport,
                 onLoadDemoContent = viewModel::loadDemoContent,
                 onClearPreview = viewModel::clearPreview,
+                onSendTestBroadcast = viewModel::sendTestBroadcast,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = AppRoutes.SessionEvents,
+            arguments = listOf(navArgument(AppRoutes.SessionIdArg) { type = NavType.StringType })
+        ) { backStackEntry ->
+            val sessionId = requireNotNull(backStackEntry.arguments?.getString(AppRoutes.SessionIdArg))
+            val factory = remember(container, sessionId) {
+                viewModelFactory {
+                    initializer {
+                        EventsViewModel(
+                            sessionId = sessionId,
+                            authRepository = container.authRepository,
+                            rouletteRepository = container.rouletteRepository,
+                            eventsRepository = container.eventsRepository,
+                            localSettingsRepository = container.localSettingsRepository,
+                            notificationRelayClient = container.notificationRelayClient
+                        )
+                    }
+                }
+            }
+            val activity = LocalContext.current as ComponentActivity
+            val viewModel: EventsViewModel = viewModel(
+                viewModelStoreOwner = activity,
+                key = sessionId,
+                factory = factory
+            )
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            EventsScreen(
+                uiState = uiState,
+                onToggleActive = viewModel::toggleActive,
+                onMarkCompleted = viewModel::markCurrentEventCompleted,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = AppRoutes.SessionLightning,
+            arguments = listOf(navArgument(AppRoutes.SessionIdArg) { type = NavType.StringType })
+        ) { backStackEntry ->
+            val sessionId = requireNotNull(backStackEntry.arguments?.getString(AppRoutes.SessionIdArg))
+            val factory = remember(container, sessionId) {
+                viewModelFactory {
+                    initializer {
+                        LightningViewModel(
+                            sessionId = sessionId,
+                            authRepository = container.authRepository,
+                            rouletteRepository = container.rouletteRepository,
+                            connectivityRepository = container.connectivityRepository
+                        )
+                    }
+                }
+            }
+            val viewModel: LightningViewModel = viewModel(factory = factory)
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            LightningScreen(
+                uiState = uiState,
+                onStartRound = viewModel::startRound,
+                onAnswer = viewModel::answer,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -444,6 +531,49 @@ fun DespedidaRuletaApp(container: AppContainer, initialSessionId: String? = null
                 onQuietEndChanged = viewModel::setQuietEnd,
                 onBack = { navController.popBackStack() }
             )
+        }
+        }
+
+        val currentBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = currentBackStackEntry?.destination?.route
+        val currentSessionId = currentBackStackEntry?.arguments?.getString(AppRoutes.SessionIdArg)
+
+        if (currentSessionId != null) {
+            val activity = LocalContext.current as ComponentActivity
+            val eventsFactory = remember(container, currentSessionId) {
+                viewModelFactory {
+                    initializer {
+                        EventsViewModel(
+                            sessionId = currentSessionId,
+                            authRepository = container.authRepository,
+                            rouletteRepository = container.rouletteRepository,
+                            eventsRepository = container.eventsRepository,
+                            localSettingsRepository = container.localSettingsRepository,
+                            notificationRelayClient = container.notificationRelayClient
+                        )
+                    }
+                }
+            }
+            val eventsViewModel: EventsViewModel = viewModel(
+                viewModelStoreOwner = activity,
+                key = currentSessionId,
+                factory = eventsFactory
+            )
+            val eventsUiState by eventsViewModel.uiState.collectAsStateWithLifecycle()
+            // Kept alive for every session-scoped route (including lightning) so dismissals
+            // aren't forgotten when navigating away and back; only the dialog's visibility
+            // is gated on the current route below.
+            var dismissedEventId by rememberSaveable(currentSessionId) { mutableStateOf<String?>(null) }
+
+            val shouldShowPopup = currentRoute != AppRoutes.SessionLightning &&
+                eventsUiState.currentEvent?.id != dismissedEventId &&
+                !eventsUiState.settings.isQuietHourNow()
+            if (shouldShowPopup) {
+                EventArrivalPopup(
+                    uiState = eventsUiState,
+                    onAccept = { dismissedEventId = eventsUiState.currentEvent?.id }
+                )
+            }
         }
     }
 }

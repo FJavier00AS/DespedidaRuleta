@@ -60,7 +60,6 @@ import com.example.despedidaruleta.domain.model.GamePhase
 import com.example.despedidaruleta.domain.model.RouletteCategory
 import kotlin.math.PI
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
@@ -146,52 +145,44 @@ private fun GameStagePanel(
     val showContentWheel = uiState.gameState.selectedCategory != null &&
         (phase == GamePhase.CATEGORY_SELECTED || phase == GamePhase.CONTENT_SPINNING || phase == GamePhase.COMPLETED)
 
-    if (showContentWheel) {
+    if (phase == GamePhase.IDLE) {
+        QuestionIntroPanel(uiState = uiState, onSpinCategory = onSpinCategory)
+    } else if (showContentWheel) {
         ContentWheelPanel(uiState = uiState, onSpinContent = onSpinContent)
     } else {
-        CategoryWheelPanel(uiState = uiState, onSpinCategory = onSpinCategory)
+        QuestionIntroPanel(uiState = uiState, onSpinCategory = onSpinCategory)
     }
 }
 
 @Composable
-private fun CategoryWheelPanel(
+private fun QuestionIntroPanel(
     uiState: RouletteUiState,
     onSpinCategory: () -> Unit
 ) {
-    val totalAvailable = uiState.totalAvailable.coerceAtLeast(0)
-    val segments = RouletteCategory.wheelEntries.map { category ->
-        val stats = uiState.stats.firstOrNull { it.category == category }
-        val available = stats?.availableCount ?: 0
-        val percent = if (totalAvailable > 0) ((available * 100f) / totalAvailable).roundToInt() else 0
-        WheelSegment(
-            label = "${category.shortLabel()}\n$percent%",
-            legend = "${category.label}: $available (${percent}%)",
-            weight = available.coerceAtLeast(0),
-            color = category.segmentColor(),
-            labelColor = category.segmentTextColor()
-        )
-    }
-
     VegasCard {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(text = "Ruleta principal", style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
+            Text(text = "Ruleta de preguntas", style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
             Text(
-                text = "La probabilidad depende del contenido disponible: cuanto mas contenido libre tiene una categoria, mas espacio ocupa en la ruleta.",
+                text = "La partida gira alrededor de preguntas. Si aciertas, recibirás un mensaje de premio; si fallas, se abrirá la ruleta de castigos.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = VegasColors.TextSecondary,
                 textAlign = TextAlign.Center
             )
             WheelCanvas(
-                segments = segments,
+                segments = listOf(
+                    WheelSegment(
+                        label = "Preguntas",
+                        weight = 1,
+                        color = VegasColors.NeonCyan,
+                        labelColor = VegasColors.TextPrimary
+                    )
+                ),
                 rotation = uiState.gameState.categoryRotation,
-                centerText = when (uiState.gameState.phase) {
-                    GamePhase.CATEGORY_SPINNING -> "Girando"
-                    else -> "Principal"
-                },
+                centerText = "Preguntas",
                 effectsEnabled = uiState.settings.visualEffectsEnabled
             )
             VegasPrimaryButton(
-                text = if (uiState.gameState.phase == GamePhase.CATEGORY_SPINNING) "Girando categoria" else "Girar categoria",
+                text = if (uiState.gameState.phase == GamePhase.CATEGORY_SPINNING) "Girando pregunta" else "Girar pregunta",
                 onClick = onSpinCategory,
                 enabled = uiState.canSpinCategory,
                 isLoading = uiState.actionLoading
@@ -217,7 +208,6 @@ private fun ContentWheelPanel(
     val segments = wheelContent.mapIndexed { index, item ->
         WheelSegment(
             label = "#${item.number}",
-            legend = "#${item.number}: ${item.text.take(42)}",
             weight = 1,
             color = if (index % 2 == 0) category.segmentColor() else category.segmentColor().copy(alpha = 0.72f),
             labelColor = category.segmentTextColor()
@@ -312,7 +302,7 @@ private fun WheelCanvas(
     effectsEnabled: Boolean
 ) {
     val visibleSegments = segments.filter { it.weight > 0 }.ifEmpty {
-        listOf(WheelSegment("Sin\ndatos", "Sin datos", 1, VegasColors.TextSecondary, VegasColors.TextPrimary))
+        listOf(WheelSegment("Sin\ndatos", 1, VegasColors.TextSecondary, VegasColors.TextPrimary))
     }
     val totalWeight = visibleSegments.sumOf { it.weight }.coerceAtLeast(1)
     val textSize = with(LocalDensity.current) { 14.sp.toPx() }
@@ -378,11 +368,6 @@ private fun WheelCanvas(
             modifier = Modifier.align(Alignment.TopCenter),
             style = MaterialTheme.typography.headlineMedium
         )
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 10.dp)) {
-        visibleSegments.take(8).forEach { segment ->
-            Text(text = segment.legend, style = MaterialTheme.typography.labelMedium, color = VegasColors.TextSecondary)
-        }
     }
 }
 
@@ -467,7 +452,7 @@ private fun ResultDialog(uiState: RouletteUiState, onResolveResult: (Boolean) ->
                 Text(text = text, style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
                 if (isQuestion) {
                     Text(
-                        text = "Marca acierto para volver a la ruleta principal. Marca fallo para abrir una ruleta de castigos.",
+                        text = "Marca premio para recibir el premio y volver a empezar. Marca fallo para abrir una ruleta de castigos.",
                         color = VegasColors.TextSecondary,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -476,7 +461,7 @@ private fun ResultDialog(uiState: RouletteUiState, onResolveResult: (Boolean) ->
         },
         confirmButton = {
             TextButton(onClick = { onResolveResult(true) }, enabled = !uiState.actionLoading) {
-                Text(text = if (isQuestion) "Acierto" else "Volver", color = VegasColors.Gold)
+                Text(text = if (isQuestion) "Premio" else "Volver", color = VegasColors.Gold)
             }
         },
         dismissButton = {
@@ -491,7 +476,6 @@ private fun ResultDialog(uiState: RouletteUiState, onResolveResult: (Boolean) ->
 
 private data class WheelSegment(
     val label: String,
-    val legend: String,
     val weight: Int,
     val color: Color,
     val labelColor: Color
@@ -502,10 +486,12 @@ private fun RouletteCategory.segmentColor(): Color = when (this) {
     RouletteCategory.CHALLENGE -> VegasColors.Gold
     RouletteCategory.LIGHTNING -> VegasColors.NeonPurple
     RouletteCategory.PUNISHMENT -> VegasColors.Red
+    RouletteCategory.EVENT -> VegasColors.Warning
 }
 
 private fun RouletteCategory.segmentTextColor(): Color = when (this) {
     RouletteCategory.CHALLENGE -> VegasColors.Charcoal
+    RouletteCategory.EVENT -> VegasColors.Charcoal
     else -> VegasColors.TextPrimary
 }
 
@@ -514,6 +500,7 @@ private fun RouletteCategory.shortLabel(): String = when (this) {
     RouletteCategory.CHALLENGE -> "Retos"
     RouletteCategory.LIGHTNING -> "Relampago"
     RouletteCategory.PUNISHMENT -> "Castigos"
+    RouletteCategory.EVENT -> "Eventos"
 }
 
 private fun categoryWheelTitle(category: RouletteCategory): String = when (category) {
@@ -522,13 +509,16 @@ private fun categoryWheelTitle(category: RouletteCategory): String = when (categ
     // La ronda relampago no usa ruleta de contenido; rama necesaria por exhaustividad.
     RouletteCategory.LIGHTNING -> "Ronda relampago"
     RouletteCategory.PUNISHMENT -> "Ruleta de castigos"
+    RouletteCategory.EVENT -> "Ruleta de eventos"
 }
 
-private fun contentWheelMessage(uiState: RouletteUiState, category: RouletteCategory, availableCount: Int): String = when (uiState.gameState.phase) {
-    GamePhase.CATEGORY_SELECTED -> "Ha salido ${category.label.lowercase()}. Ahora gira esta ruleta. Quedan $availableCount disponibles."
-    GamePhase.CONTENT_SPINNING -> "La ruleta de ${category.label.lowercase()} esta girando."
-    GamePhase.COMPLETED -> "Resultado preparado. Resuelve el modal para continuar."
-    else -> "Contenido disponible: $availableCount."
+private fun contentWheelMessage(uiState: RouletteUiState, category: RouletteCategory, availableCount: Int): String {
+    return when (uiState.gameState.phase) {
+        GamePhase.CATEGORY_SELECTED -> "Ha salido ${category.label.lowercase()}. Ahora gira esta ruleta. Quedan $availableCount disponibles."
+        GamePhase.CONTENT_SPINNING -> "La ruleta de ${category.label.lowercase()} esta girando."
+        GamePhase.COMPLETED -> "Resultado preparado. Resuelve el modal para continuar."
+        else -> "Contenido disponible: $availableCount."
+    }
 }
 
 private fun resultTitle(category: RouletteCategory): String = when (category) {
@@ -536,4 +526,5 @@ private fun resultTitle(category: RouletteCategory): String = when (category) {
     RouletteCategory.CHALLENGE -> "Reto"
     RouletteCategory.LIGHTNING -> "Ronda relampago"
     RouletteCategory.PUNISHMENT -> "Castigo"
+    RouletteCategory.EVENT -> "Evento"
 }

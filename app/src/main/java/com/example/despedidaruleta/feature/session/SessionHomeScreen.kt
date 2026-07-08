@@ -52,6 +52,7 @@ import java.util.Locale
 fun SessionHomeScreen(
     uiState: SessionHomeUiState,
     onOpenWheel: () -> Unit,
+    onOpenEvents: () -> Unit,
     onOpenLightning: () -> Unit,
     onOpenAdmin: () -> Unit,
     onOpenHistory: () -> Unit,
@@ -85,6 +86,7 @@ fun SessionHomeScreen(
                 else -> SessionHomeContent(
                     session = uiState.session,
                     onOpenWheel = onOpenWheel,
+                    onOpenEvents = onOpenEvents,
                     onOpenLightning = onOpenLightning,
                     onOpenAdmin = onOpenAdmin,
                     onOpenHistory = onOpenHistory,
@@ -100,6 +102,7 @@ fun SessionHomeScreen(
 private fun SessionHomeContent(
     session: SessionDetail,
     onOpenWheel: () -> Unit,
+    onOpenEvents: () -> Unit,
     onOpenLightning: () -> Unit,
     onOpenAdmin: () -> Unit,
     onOpenHistory: () -> Unit,
@@ -143,6 +146,10 @@ private fun SessionHomeContent(
             VegasPrimaryButton(
                 text = "Abrir ruleta",
                 onClick = onOpenWheel
+            )
+            VegasSecondaryButton(
+                text = "Eventos aleatorios",
+                onClick = onOpenEvents
             )
             VegasSecondaryButton(
                 text = "Ronda relampago",
@@ -273,6 +280,7 @@ private fun SessionHomePreview() {
             ),
             onOpenSettings = {},
             onOpenWheel = {},
+            onOpenEvents = {},
             onOpenLightning = {},
             onOpenAdmin = {},
             onOpenHistory = {},

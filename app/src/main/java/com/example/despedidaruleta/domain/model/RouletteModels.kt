@@ -6,10 +6,11 @@ enum class RouletteCategory(val firestoreValue: String, val label: String) {
     QUESTION("QUESTION", "Preguntas"),
     CHALLENGE("CHALLENGE", "Retos"),
     LIGHTNING("LIGHTNING", "Ronda relampago"),
-    PUNISHMENT("PUNISHMENT", "Castigos");
+    PUNISHMENT("PUNISHMENT", "Castigos"),
+    EVENT("EVENT", "Eventos");
 
     companion object {
-        // La ronda relampago se juega fuera de la ruleta: no participa en los giros de categoria.
+        // La ronda relampago y los eventos se juegan fuera de la ruleta principal.
         val wheelEntries: List<RouletteCategory> = listOf(QUESTION, CHALLENGE, PUNISHMENT)
 
         fun fromFirestore(value: String?): RouletteCategory? = entries.firstOrNull { it.firestoreValue == value }
@@ -21,6 +22,7 @@ enum class RouletteCategory(val firestoreValue: String, val label: String) {
                 "challenge", "challenges", "reto", "retos", "r" -> CHALLENGE
                 "lightning", "ronda relampago", "ronda relámpago", "relampago", "relámpago", "rr" -> LIGHTNING
                 "punishment", "punishments", "castigo", "castigos", "c" -> PUNISHMENT
+                "event", "events", "evento", "eventos", "e" -> EVENT
                 else -> null
             }
         }

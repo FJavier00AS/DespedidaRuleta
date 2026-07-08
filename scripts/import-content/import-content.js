@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Sube contenido de la ruleta (preguntas, retos, ronda relampago, castigos)
- * directamente a Firestore, sin pasar por la app.
+ * Sube contenido de la ruleta (preguntas, retos, ronda relampago, castigos,
+ * eventos) directamente a Firestore, sin pasar por la app.
  *
  * Replica exactamente lo que hace el importador de la app: escribe cada
  * pregunta en sessions/{sessionId}/content/{auto-id} Y actualiza
@@ -14,13 +14,13 @@
  *   node import-content.js --service-account ./service-account.json \
  *     --session <sessionId> --category pregunta --file ./preguntas.txt
  *
- * Formato del archivo (una linea por pregunta/reto/castigo):
+ * Formato del archivo (una linea por pregunta/reto/castigo/evento):
  *   Texto de la pregunta
  *   3;Texto de la pregunta con numero explicito
  *   3;Texto de la pregunta;dificultad   (dificultad opcional al final)
  *
  * Categorias aceptadas (--category): pregunta/question, reto/challenge,
- * relampago/lightning/rr, castigo/punishment.
+ * relampago/lightning/rr, castigo/punishment, evento/event.
  *
  * Dificultades aceptadas (ultimo campo opcional): facil/suave/easy/1,
  * media/medio/medium/2, dificil/bestia/hard/3. Se guarda como campo
@@ -56,6 +56,11 @@ const CATEGORY_ALIASES = {
   castigo: "PUNISHMENT",
   castigos: "PUNISHMENT",
   c: "PUNISHMENT",
+  event: "EVENT",
+  events: "EVENT",
+  evento: "EVENT",
+  eventos: "EVENT",
+  e: "EVENT",
 };
 
 const DIFFICULTY_ALIASES = {
@@ -127,11 +132,11 @@ function parseArgs(argv) {
 function resolveCategory(raw) {
   const normalized = raw.trim().toLowerCase();
   const direct = raw.trim().toUpperCase();
-  if (["QUESTION", "CHALLENGE", "LIGHTNING", "PUNISHMENT"].includes(direct)) return direct;
+  if (["QUESTION", "CHALLENGE", "LIGHTNING", "PUNISHMENT", "EVENT"].includes(direct)) return direct;
   const mapped = CATEGORY_ALIASES[normalized];
   if (!mapped) {
     throw new Error(
-      `Categoria "${raw}" no reconocida. Usa: pregunta, reto, relampago, castigo (o question/challenge/lightning/punishment).`
+      `Categoria "${raw}" no reconocida. Usa: pregunta, reto, relampago, castigo, evento (o question/challenge/lightning/punishment/event).`
     );
   }
   return mapped;
@@ -169,15 +174,15 @@ function parseLines(rawText, startingNumber) {
   return lines.map((line, index) => {
     const separatorMatch = line.match(/^(\d+)\s*[;\t.]\s*(.*)$/);
     let number;
-    let rawText;
+    let rawLineText;
     if (separatorMatch) {
       number = parseInt(separatorMatch[1], 10);
-      rawText = separatorMatch[2].trim();
+      rawLineText = separatorMatch[2].trim();
     } else {
       number = autoNumber++;
-      rawText = line;
+      rawLineText = line;
     }
-    const { text, difficulty } = extractTrailingDifficulty(rawText);
+    const { text, difficulty } = extractTrailingDifficulty(rawLineText);
     return { sourceLine: index + 1, number, text, difficulty };
   });
 }

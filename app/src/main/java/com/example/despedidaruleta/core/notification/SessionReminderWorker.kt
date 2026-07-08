@@ -1,8 +1,6 @@
 ﻿package com.example.despedidaruleta.core.notification
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -15,6 +13,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.despedidaruleta.MainActivity
 import com.example.despedidaruleta.R
+import com.example.despedidaruleta.domain.model.isWithinQuietHours
 import java.util.Calendar
 
 class SessionReminderWorker(
@@ -27,7 +26,8 @@ class SessionReminderWorker(
 
         val quietStart = inputData.getInt(KEY_QUIET_START, 2).coerceIn(0, 23)
         val quietEnd = inputData.getInt(KEY_QUIET_END, 9).coerceIn(0, 23)
-        if (isQuietHour(quietStart, quietEnd)) return Result.success()
+        val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        if (isWithinQuietHours(currentHour, quietStart, quietEnd)) return Result.success()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
@@ -37,7 +37,7 @@ class SessionReminderWorker(
             if (!granted) return Result.success()
         }
 
-        ensureChannel()
+        NotificationChannels.ensureRemindersChannel(applicationContext)
         val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_SESSION_ID, sessionId)
@@ -51,7 +51,7 @@ class SessionReminderWorker(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(applicationContext, NotificationChannels.REMINDERS_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Despedida Ruleta")
             .setContentText("Toca girar o preparar la siguiente ronda.")
@@ -66,31 +66,6 @@ class SessionReminderWorker(
         return Result.success()
     }
 
-    private fun isQuietHour(start: Int, end: Int): Boolean {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        return if (start == end) {
-            false
-        } else if (start < end) {
-            hour in start until end
-        } else {
-            hour >= start || hour < end
-        }
-    }
-
-    private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = applicationContext.getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Avisos de ruleta",
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            description = "Recordatorios locales de la sesion activa"
-        }
-        manager.createNotificationChannel(channel)
-    }
-
     companion object {
         const val KEY_SESSION_ID = "session_id"
         const val KEY_QUIET_START = "quiet_start"
@@ -98,6 +73,5 @@ class SessionReminderWorker(
         const val KEY_SOUND = "sound"
         const val KEY_HAPTIC = "haptic"
         const val EXTRA_SESSION_ID = "session_id"
-        private const val CHANNEL_ID = "roulette_reminders"
     }
 }
