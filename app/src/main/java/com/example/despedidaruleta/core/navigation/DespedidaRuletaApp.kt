@@ -355,6 +355,33 @@ fun DespedidaRuletaApp(
         }
 
         composable(
+            route = AppRoutes.SessionLightning,
+            arguments = listOf(navArgument(AppRoutes.SessionIdArg) { type = NavType.StringType })
+        ) { backStackEntry ->
+            val sessionId = requireNotNull(backStackEntry.arguments?.getString(AppRoutes.SessionIdArg))
+            val factory = remember(container, sessionId) {
+                viewModelFactory {
+                    initializer {
+                        LightningViewModel(
+                            sessionId = sessionId,
+                            authRepository = container.authRepository,
+                            rouletteRepository = container.rouletteRepository,
+                            connectivityRepository = container.connectivityRepository
+                        )
+                    }
+                }
+            }
+            val viewModel: LightningViewModel = viewModel(factory = factory)
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            LightningScreen(
+                uiState = uiState,
+                onStartRound = viewModel::startRound,
+                onAnswer = viewModel::answer,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
             route = AppRoutes.SessionAdmin,
             arguments = listOf(navArgument(AppRoutes.SessionIdArg) { type = NavType.StringType })
         ) { backStackEntry ->

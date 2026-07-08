@@ -3,6 +3,7 @@
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.example.despedidaruleta.domain.model.Difficulty
 import com.example.despedidaruleta.domain.model.ImportPreview
 import com.example.despedidaruleta.domain.model.ImportRow
 import com.example.despedidaruleta.domain.model.RouletteCategory
@@ -148,17 +149,37 @@ class XlsxContentImportParser(
             val sourceRow = index + 1 + if (firstOrNull()?.isHeaderRow() == true) 1 else 0
             val parsed = if (fallbackCategory != null) {
                 val firstNumber = compact.firstOrNull()?.toIntOrNull()
-                val text = if (firstNumber != null) compact.drop(1).joinToString(" ").trim() else compact.joinToString(" ").trim()
+                val textCells = if (firstNumber != null) compact.drop(1) else compact
+                val (difficulty, contentCells) = extractDifficulty(textCells)
                 val number = firstNumber ?: generatedNumber++
-                ImportRow(sourceRow = sourceRow, category = fallbackCategory, number = number, text = text)
+                ImportRow(
+                    sourceRow = sourceRow,
+                    category = fallbackCategory,
+                    number = number,
+                    text = contentCells.joinToString(" ").trim(),
+                    difficulty = difficulty
+                )
             } else {
                 val category = compact.getOrNull(0)?.let { RouletteCategory.parse(it) }
                 val number = compact.getOrNull(1)?.toIntOrNull()
-                val text = compact.drop(2).joinToString(" ").trim()
-                ImportRow(sourceRow = sourceRow, category = category, number = number, text = text)
+                val (difficulty, contentCells) = extractDifficulty(compact.drop(2))
+                ImportRow(
+                    sourceRow = sourceRow,
+                    category = category,
+                    number = number,
+                    text = contentCells.joinToString(" ").trim(),
+                    difficulty = difficulty
+                )
             }
             parsed.validate()
         }
+    }
+
+    // La dificultad viaja como ultima columna opcional (facil/media/dificil o suave/medio/bestia).
+    private fun extractDifficulty(cells: List<String>): Pair<Difficulty?, List<String>> {
+        val last = cells.lastOrNull()?.trim() ?: return null to cells
+        val difficulty = Difficulty.parse(last)
+        return if (difficulty != null && cells.size > 1) difficulty to cells.dropLast(1) else null to cells
     }
 
     private fun ImportRow.validate(): ImportRow = when {

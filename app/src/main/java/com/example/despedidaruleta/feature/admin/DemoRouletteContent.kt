@@ -1,5 +1,6 @@
 ﻿package com.example.despedidaruleta.feature.admin
 
+import com.example.despedidaruleta.domain.model.Difficulty
 import com.example.despedidaruleta.domain.model.ImportRow
 import com.example.despedidaruleta.domain.model.RouletteCategory
 
@@ -24,7 +25,7 @@ object DemoRouletteContent {
         "Que mentira piadosa le hemos perdonado todos alguna vez?",
         "Quien conoce el secreto mas ridiculo del novio?",
         "Que titular de periodico describiria esta despedida?"
-    ).mapIndexed { index, text -> demoRow(RouletteCategory.QUESTION, index + 1, text) }
+    ).mapIndexed { index, text -> demoRow(RouletteCategory.QUESTION, index + 1, text, demoDifficulty(index, 12)) }
 
     private fun challengeRows(): List<ImportRow> = listOf(
         "Haz un brindis de 20 segundos como si fueras presentador de gala.",
@@ -61,12 +62,20 @@ object DemoRouletteContent {
         "Debes responder la proxima pregunta como si estuvieras en una rueda de prensa.",
         "Tienes que hacer una mini coreografia de 10 segundos antes del siguiente giro.",
         "Durante un turno, solo puedes celebrar con aplausos muy elegantes."
-    ).mapIndexed { index, text -> demoRow(RouletteCategory.PUNISHMENT, index + 1, text) }
+    ).mapIndexed { index, text -> demoRow(RouletteCategory.PUNISHMENT, index + 1, text, demoDifficulty(index, 8)) }
 
-    private fun demoRow(category: RouletteCategory, number: Int, text: String): ImportRow = ImportRow(
+    // Reparte el contenido demo en tres niveles para poder probar los castigos ponderados.
+    private fun demoDifficulty(index: Int, total: Int): Difficulty = when {
+        index < total / 3 -> Difficulty.EASY
+        index < total * 2 / 3 -> Difficulty.MEDIUM
+        else -> Difficulty.HARD
+    }
+
+    private fun demoRow(category: RouletteCategory, number: Int, text: String, difficulty: Difficulty? = null): ImportRow = ImportRow(
         sourceRow = number,
         category = category,
         number = number,
-        text = text
+        text = text,
+        difficulty = difficulty
     )
 }

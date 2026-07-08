@@ -223,6 +223,15 @@ private fun ContentWheelPanel(
                 color = VegasColors.TextSecondary,
                 textAlign = TextAlign.Center
             )
+            val pendingDifficulty = uiState.gameState.pendingPunishmentDifficulty
+            if (category == RouletteCategory.PUNISHMENT && pendingDifficulty != null && uiState.gameState.phase != GamePhase.COMPLETED) {
+                Text(
+                    text = "Fallo en pregunta ${pendingDifficulty.questionLabel.lowercase()}: los castigos nivel ${pendingDifficulty.punishmentLabel} tienen mas papeletas.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = VegasColors.Gold,
+                    textAlign = TextAlign.Center
+                )
+            }
             WheelCanvas(
                 segments = segments,
                 rotation = uiState.gameState.contentRotation,
@@ -395,7 +404,7 @@ private fun StatsPanel(uiState: RouletteUiState) {
     VegasCard {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(text = "Disponibilidad", style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
-            RouletteCategory.entries.forEach { category ->
+            RouletteCategory.wheelEntries.forEach { category ->
                 val stats = uiState.stats.firstOrNull { it.category == category }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(text = category.label, color = category.segmentColor(), fontWeight = FontWeight.SemiBold)
@@ -428,8 +437,15 @@ private fun ResultDialog(uiState: RouletteUiState, onResolveResult: (Boolean) ->
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val difficulty = uiState.content.firstOrNull { it.id == state.selectedContentId }?.difficulty
+                val difficultyNote = when {
+                    difficulty == null -> ""
+                    category == RouletteCategory.QUESTION -> " · ${difficulty.questionLabel} (${difficulty.questionPoints} pts)"
+                    category == RouletteCategory.PUNISHMENT -> " · Nivel ${difficulty.punishmentLabel}"
+                    else -> " · ${difficulty.labelFor(category)}"
+                }
                 Text(
-                    text = "${category.label} #${state.selectedContentNumber ?: ""}",
+                    text = "${category.label} #${state.selectedContentNumber ?: ""}$difficultyNote",
                     color = category.segmentColor(),
                     style = MaterialTheme.typography.labelLarge
                 )

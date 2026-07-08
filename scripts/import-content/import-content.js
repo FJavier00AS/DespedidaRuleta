@@ -17,9 +17,16 @@
  * Formato del archivo (una linea por pregunta/reto/castigo/evento):
  *   Texto de la pregunta
  *   3;Texto de la pregunta con numero explicito
+ *   3;Texto de la pregunta;dificultad   (dificultad opcional al final)
  *
  * Categorias aceptadas (--category): pregunta/question, reto/challenge,
  * relampago/lightning/rr, castigo/punishment, evento/event.
+ *
+ * Dificultades aceptadas (ultimo campo opcional): facil/suave/easy/1,
+ * media/medio/medium/2, dificil/bestia/hard/3. Se guarda como campo
+ * "difficulty" del contenido y en el mapa "difficulties" de categoryStats,
+ * que es lo que usa la app para cargar los castigos del nivel de la
+ * pregunta fallada.
  *
  * Volver a ejecutar el mismo archivo es seguro: las filas ya importadas
  * (mismo texto normalizado + numero + categoria) se saltan, igual que en la app.
@@ -55,6 +62,34 @@ const CATEGORY_ALIASES = {
   eventos: "EVENT",
   e: "EVENT",
 };
+
+const DIFFICULTY_ALIASES = {
+  facil: "EASY",
+  "fácil": "EASY",
+  suave: "EASY",
+  easy: "EASY",
+  "1": "EASY",
+  media: "MEDIUM",
+  medio: "MEDIUM",
+  medium: "MEDIUM",
+  "2": "MEDIUM",
+  dificil: "HARD",
+  "difícil": "HARD",
+  bestia: "HARD",
+  hard: "HARD",
+  "3": "HARD",
+};
+
+// La dificultad viaja como ultimo campo opcional de la linea: "3;texto;media".
+// Solo se interpreta como dificultad si el segmento final coincide con un alias.
+function extractTrailingDifficulty(text) {
+  const separatorIndex = text.lastIndexOf(";");
+  if (separatorIndex < 0) return { text, difficulty: null };
+  const candidate = text.slice(separatorIndex + 1).trim().toLowerCase();
+  const difficulty = DIFFICULTY_ALIASES[candidate];
+  if (!difficulty) return { text, difficulty: null };
+  return { text: text.slice(0, separatorIndex).trim(), difficulty };
+}
 
 function parseArgs(argv) {
   const result = { dryRun: false };
@@ -139,15 +174,16 @@ function parseLines(rawText, startingNumber) {
   return lines.map((line, index) => {
     const separatorMatch = line.match(/^(\d+)\s*[;\t.]\s*(.*)$/);
     let number;
-    let text;
+    let rawLineText;
     if (separatorMatch) {
       number = parseInt(separatorMatch[1], 10);
-      text = separatorMatch[2].trim();
+      rawLineText = separatorMatch[2].trim();
     } else {
       number = autoNumber++;
-      text = line;
+      rawLineText = line;
     }
-    return { sourceLine: index + 1, number, text };
+    const { text, difficulty } = extractTrailingDifficulty(rawLineText);
+    return { sourceLine: index + 1, number, text, difficulty };
   });
 }
 
@@ -191,6 +227,7 @@ async function main() {
   const seenHashes = new Set(existingStats.contentHashes || []);
   const availableIds = [...(existingStats.availableContentIds || [])];
   const contentHashes = [...(existingStats.contentHashes || [])];
+  const difficulties = { ...(existingStats.difficulties || {}) };
 
   let inserted = 0;
   let skippedDuplicate = 0;
@@ -228,6 +265,10 @@ async function main() {
       createdAt: now,
       updatedAt: now,
     };
+    if (row.difficulty) {
+      contentData.difficulty = row.difficulty;
+      difficulties[contentRef.id] = row.difficulty;
+    }
     if (!args.dryRun) {
       batch.set(contentRef, contentData);
     }
@@ -246,6 +287,7 @@ async function main() {
         usedCount: existingStats.usedCount || 0,
         availableContentIds: availableIds,
         contentHashes: contentHashes,
+        difficulties: difficulties,
         exhausted: false,
         updatedAt: now,
       },
