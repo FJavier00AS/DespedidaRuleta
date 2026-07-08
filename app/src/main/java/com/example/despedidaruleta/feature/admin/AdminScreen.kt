@@ -177,7 +177,7 @@ private fun StatsCard(uiState: AdminUiState) {
     VegasCard {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(text = "Resumen", style = MaterialTheme.typography.titleLarge)
-            RouletteCategory.entries.forEach { category ->
+            RouletteCategory.entries.filterNot { it == RouletteCategory.CHALLENGE }.forEach { category ->
                 val stats = uiState.stats.firstOrNull { it.category == category }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(text = category.label, color = VegasColors.Gold)

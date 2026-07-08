@@ -404,7 +404,7 @@ private fun StatsPanel(uiState: RouletteUiState) {
     VegasCard {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(text = "Disponibilidad", style = MaterialTheme.typography.titleLarge, color = VegasColors.TextPrimary)
-            RouletteCategory.wheelEntries.forEach { category ->
+            RouletteCategory.wheelEntries.filterNot { it == RouletteCategory.CHALLENGE }.forEach { category ->
                 val stats = uiState.stats.firstOrNull { it.category == category }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(text = category.label, color = category.segmentColor(), fontWeight = FontWeight.SemiBold)
