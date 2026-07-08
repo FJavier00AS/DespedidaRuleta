@@ -138,28 +138,23 @@ fun AdminScreen(
                             modifier = Modifier.weight(1f)
                         )
                         VegasSecondaryButton(
-                            text = "Retos",
-                            onClick = { openFile(RouletteCategory.CHALLENGE) },
+                            text = "Relampago",
+                            onClick = { openFile(RouletteCategory.LIGHTNING) },
                             modifier = Modifier.weight(1f)
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                         VegasSecondaryButton(
-                            text = "Relampago",
-                            onClick = { openFile(RouletteCategory.LIGHTNING) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        VegasSecondaryButton(
                             text = "Castigos",
                             onClick = { openFile(RouletteCategory.PUNISHMENT) },
                             modifier = Modifier.weight(1f)
                         )
+                        VegasSecondaryButton(
+                            text = "Eventos",
+                            onClick = { openFile(RouletteCategory.EVENT) },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-                    VegasSecondaryButton(
-                        text = "Eventos",
-                        onClick = { openFile(RouletteCategory.EVENT) },
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
 
