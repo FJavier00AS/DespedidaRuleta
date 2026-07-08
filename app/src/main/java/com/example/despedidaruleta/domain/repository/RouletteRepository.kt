@@ -18,6 +18,7 @@ interface RouletteRepository {
     fun observeSpinHistory(sessionId: String, limit: Long = 80): Flow<RealtimeValue<List<SpinRecord>>>
 
     suspend fun importContent(user: AuthUser, sessionId: String, rows: List<ImportRow>): ImportResult
+    suspend fun clearCategory(user: AuthUser, sessionId: String, category: RouletteCategory)
     suspend fun startCategorySpin(user: AuthUser, sessionId: String): RouletteCategory
     suspend fun markCategorySpinCompleted(user: AuthUser, sessionId: String)
     suspend fun startContentSpin(user: AuthUser, sessionId: String, category: RouletteCategory): SpinRecord

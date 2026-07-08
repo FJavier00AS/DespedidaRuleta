@@ -409,6 +409,9 @@ fun DespedidaRuletaApp(
                 onLoadDemoContent = viewModel::loadDemoContent,
                 onClearPreview = viewModel::clearPreview,
                 onSendTestBroadcast = viewModel::sendTestBroadcast,
+                onRequestClearCategory = viewModel::requestClearCategory,
+                onCancelClearCategory = viewModel::cancelClearCategory,
+                onConfirmClearCategory = viewModel::confirmClearCategory,
                 onBack = { navController.popBackStack() }
             )
         }

@@ -34,7 +34,9 @@ data class AdminUiState(
     val networkStatus: NetworkStatus = NetworkStatus.ONLINE,
     val errorMessage: String? = null,
     val infoMessage: String? = null,
-    val isSendingBroadcast: Boolean = false
+    val isSendingBroadcast: Boolean = false,
+    val categoryPendingClear: RouletteCategory? = null,
+    val isClearingCategory: Boolean = false
 )
 
 class AdminViewModel(
@@ -118,6 +120,38 @@ class AdminViewModel(
 
     fun clearPreview() {
         _uiState.update { it.copy(preview = null, result = null, errorMessage = null) }
+    }
+
+    fun requestClearCategory(category: RouletteCategory) {
+        _uiState.update { it.copy(categoryPendingClear = category) }
+    }
+
+    fun cancelClearCategory() {
+        _uiState.update { it.copy(categoryPendingClear = null) }
+    }
+
+    fun confirmClearCategory() {
+        val category = _uiState.value.categoryPendingClear ?: return
+        val user = authRepository.currentUser
+        if (user == null) {
+            _uiState.update { it.copy(errorMessage = "Inicia sesion de nuevo.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isClearingCategory = true, errorMessage = null) }
+            try {
+                rouletteRepository.clearCategory(user, sessionId, category)
+                _uiState.update {
+                    it.copy(
+                        isClearingCategory = false,
+                        categoryPendingClear = null,
+                        infoMessage = "Contenido de ${category.label} borrado."
+                    )
+                }
+            } catch (error: Throwable) {
+                _uiState.update { it.copy(isClearingCategory = false, errorMessage = error.toUserMessage()) }
+            }
+        }
     }
 
     fun sendTestBroadcast() {

@@ -183,6 +183,43 @@ class FirebaseRouletteRepository(
         }.await()
     }
 
+    override suspend fun clearCategory(user: AuthUser, sessionId: String, category: RouletteCategory) {
+        val sessionRef = sessionRef(sessionId)
+        val sessionSnapshot = sessionRef.get().await()
+        assertOwner(sessionSnapshot, user.uid)
+
+        val contentSnapshot = sessionRef.collection(CONTENT)
+            .whereEqualTo(CATEGORY, category.firestoreValue)
+            .get()
+            .await()
+
+        // Chunked well under the 500-writes-per-batch limit, even though every
+        // category today is far smaller than that.
+        contentSnapshot.documents.chunked(450).forEach { chunk ->
+            val batch = firestore.batch()
+            chunk.forEach { doc -> batch.delete(doc.reference) }
+            batch.commit().await()
+        }
+
+        statsRef(sessionId, category).set(
+            mapOf(
+                CATEGORY to category.firestoreValue,
+                TOTAL_COUNT to 0,
+                AVAILABLE_COUNT to 0,
+                USED_COUNT to 0,
+                AVAILABLE_CONTENT_IDS to emptyList<String>(),
+                CONTENT_HASHES to emptyList<String>(),
+                DIFFICULTIES to emptyMap<String, String>(),
+                EXHAUSTED to false,
+                UPDATED_AT to Date()
+            )
+        ).await()
+
+        auditRef(sessionId).set(
+            auditMap(user, "CLEAR_CATEGORY", "category=${category.firestoreValue} deleted=${contentSnapshot.size()}")
+        ).await()
+    }
+
     override suspend fun startCategorySpin(user: AuthUser, sessionId: String): RouletteCategory {
         val sessionRef = sessionRef(sessionId)
         val stateRef = sessionRef.collection(STATE).document(GAME)

@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +43,9 @@ fun AdminScreen(
     onLoadDemoContent: () -> Unit,
     onClearPreview: () -> Unit,
     onSendTestBroadcast: () -> Unit,
+    onRequestClearCategory: (RouletteCategory) -> Unit,
+    onCancelClearCategory: () -> Unit,
+    onConfirmClearCategory: () -> Unit,
     onBack: () -> Unit
 ) {
     var pendingCategory by remember { mutableStateOf<RouletteCategory?>(null) }
@@ -158,7 +163,7 @@ fun AdminScreen(
                 }
             }
 
-            StatsCard(uiState)
+            StatsCard(uiState, onRequestClearCategory)
             uiState.preview?.let { preview ->
                 PreviewCard(
                     preview = preview,
@@ -170,25 +175,77 @@ fun AdminScreen(
             ContentSummaryCard(uiState)
         }
     }
+
+    ClearCategoryDialog(
+        category = uiState.categoryPendingClear,
+        isClearing = uiState.isClearingCategory,
+        onConfirm = onConfirmClearCategory,
+        onDismiss = onCancelClearCategory
+    )
 }
 
 @Composable
-private fun StatsCard(uiState: AdminUiState) {
+private fun StatsCard(uiState: AdminUiState, onRequestClearCategory: (RouletteCategory) -> Unit) {
     VegasCard {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(text = "Resumen", style = MaterialTheme.typography.titleLarge)
             RouletteCategory.entries.filterNot { it == RouletteCategory.CHALLENGE }.forEach { category ->
                 val stats = uiState.stats.firstOrNull { it.category == category }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(text = category.label, color = VegasColors.Gold)
-                    Text(
-                        text = "${stats?.availableCount ?: 0} libres / ${stats?.totalCount ?: 0}",
-                        color = VegasColors.TextSecondary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "${stats?.availableCount ?: 0} libres / ${stats?.totalCount ?: 0}",
+                            color = VegasColors.TextSecondary
+                        )
+                        TextButton(
+                            onClick = { onRequestClearCategory(category) },
+                            enabled = (stats?.totalCount ?: 0) > 0
+                        ) {
+                            Text(text = "Borrar", color = VegasColors.Error)
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ClearCategoryDialog(
+    category: RouletteCategory?,
+    isClearing: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (category == null) return
+    AlertDialog(
+        onDismissRequest = { if (!isClearing) onDismiss() },
+        containerColor = VegasColors.Card,
+        titleContentColor = VegasColors.TextPrimary,
+        textContentColor = VegasColors.TextPrimary,
+        title = { Text(text = "Borrar ${category.label}", style = MaterialTheme.typography.headlineSmall) },
+        text = {
+            Text(
+                text = "Se borrara todo el contenido de \"${category.label}\" de esta sesion. Esta accion no se puede deshacer.",
+                color = VegasColors.TextSecondary
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = !isClearing) {
+                Text(text = "Borrar", color = VegasColors.Error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isClearing) {
+                Text(text = "Cancelar", color = VegasColors.Gold)
+            }
+        }
+    )
 }
 
 @Composable
